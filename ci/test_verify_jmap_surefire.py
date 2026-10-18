@@ -19,7 +19,8 @@ class SurefireVerificationTest(unittest.TestCase):
         self.report = self.directory / f"TEST-{self.name}.xml"
         self.write_report()
 
-    def write_report(self, name=None, tests=1, failures=0, errors=0, skipped=0, classname=None):
+    def write_report(self, name=None, tests=1, failures=0, errors=0, skipped=0, classname=None,
+                     method="draftIsCreatedAndCanBeRead"):
         root = ET.Element("testsuite", {
             "name": name or self.name,
             "tests": str(tests),
@@ -29,7 +30,7 @@ class SurefireVerificationTest(unittest.TestCase):
         })
         case = ET.SubElement(root, "testcase", {
             "classname": classname or self.name,
-            "name": "draftIsCreatedAndCanBeRead",
+            "name": method,
         })
         if failures:
             ET.SubElement(case, "failure", {"message": "assertion failed"})
@@ -75,6 +76,26 @@ class SurefireVerificationTest(unittest.TestCase):
     def test_duplicate_requested_suite_rejected(self):
         with self.assertRaisesRegex(ValueError, "distinct JMAP suites"):
             verify(self.directory, [self.suite, self.suite])
+
+    def test_required_contract_method_executed(self):
+        self.write_report(method="draftIsCreatedAndCanBeRead(GuiceJamesServer)")
+        self.assertEqual(len(verify(self.directory, [self.suite],
+                                    [f"{self.suite}:draftIsCreatedAndCanBeRead"])), 1)
+
+    def test_missing_required_contract_method_rejected(self):
+        with self.assertRaisesRegex(ValueError, "missing executed contract methods"):
+            verify(self.directory, [self.suite], [f"{self.suite}:unauthorizedAccountIsRejected"])
+
+    def test_skipped_required_contract_method_rejected(self):
+        self.write_report(skipped=1)
+        with self.assertRaisesRegex(ValueError, "ran no test methods"):
+            verify(self.directory, [self.suite], [f"{self.suite}:draftIsCreatedAndCanBeRead"])
+
+    def test_invalid_or_duplicate_required_contract_method_rejected(self):
+        with self.assertRaisesRegex(ValueError, "Invalid required JMAP method"):
+            verify(self.directory, [self.suite], ["UnexpectedSuite:someMethod"])
+        with self.assertRaisesRegex(ValueError, "distinct required JMAP methods"):
+            verify(self.directory, [self.suite], [f"{self.suite}:draftIsCreatedAndCanBeRead"] * 2)
 
 
 if __name__ == "__main__":

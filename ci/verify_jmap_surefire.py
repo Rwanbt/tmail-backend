@@ -7,9 +7,18 @@ import sys
 import xml.etree.ElementTree as ET
 
 
-def verify(report_directory: Path, suites: list[str]) -> list[str]:
+def verify(report_directory: Path, suites: list[str], required: list[str] | None = None) -> list[str]:
     if not suites or len(suites) != len(set(suites)):
         raise ValueError("Specify distinct JMAP suites")
+    required = required or []
+    if len(required) != len(set(required)):
+        raise ValueError("Specify distinct required JMAP methods")
+    required_methods: dict[str, set[str]] = {suite: set() for suite in suites}
+    for entry in required:
+        suite, separator, method = entry.partition(":")
+        if not separator or suite not in required_methods or not method or not method.isidentifier():
+            raise ValueError(f"Invalid required JMAP method: {entry}")
+        required_methods[suite].add(method)
 
     summaries = []
     for suite in suites:
@@ -41,6 +50,12 @@ def verify(report_directory: Path, suites: list[str]) -> list[str]:
         executed = len(cases) - skipped
         if executed <= 0:
             raise ValueError(f"JMAP {suite} ran no test methods: {skipped=}")
+        # JUnit 5 may include the argument signature in Surefire's method name.
+        executed_names = {case.get("name").split("(", 1)[0]
+                          for case in cases if not case.findall("skipped")}
+        missing = required_methods[suite] - executed_names
+        if missing:
+            raise ValueError(f"JMAP {suite} missing executed contract methods: {', '.join(sorted(missing))}")
         summaries.append(f"PASS: {suite}: {executed} executed; {skipped} skipped")
     return summaries
 
@@ -49,9 +64,11 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("report_directory", type=Path)
     parser.add_argument("suites", nargs="+")
+    parser.add_argument("--require", action="append", default=[], metavar="SUITE:METHOD",
+                        help="Require a named JUnit method to execute without a skip")
     args = parser.parse_args()
     try:
-        for summary in verify(args.report_directory, args.suites):
+        for summary in verify(args.report_directory, args.suites, args.require):
             print(summary)
     except (ValueError, ET.ParseError, OSError) as error:
         print(f"JMAP Surefire verification FAILED: {error}", file=sys.stderr)
