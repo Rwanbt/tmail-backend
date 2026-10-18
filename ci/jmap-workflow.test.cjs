@@ -30,3 +30,29 @@ test('real Maven reactor does not contain duplicated managed MongoDB coordinates
   const coordinates = [...managedDependencies.matchAll(/<dependency>\s*<groupId>org\.mongodb<\/groupId>\s*<artifactId>mongodb-driver-reactivestreams<\/artifactId>/g)]
   assert.equal(coordinates.length, 1, 'Maven rejects duplicate dependency coordinates before JMAP can run')
 })
+
+test('the Maven reactor has no duplicate coordinates in repaired failing modules', () => {
+  const modules = [
+    ['integration-tests/webadmin/postgres-webadmin-integration-tests/pom.xml', 'tmail-guice-distributed'],
+    ['integration-tests/healthcheck/postgres-healthcheck-integration-tests/pom.xml', 'james-server-postgres-app'],
+    ['jmap/extensions/pom.xml', 'james-server-data-ldap'],
+  ]
+  for (const [relativePath, artifact] of modules) {
+    const pom = readFileSync(join(__dirname, '..', 'tmail-backend', relativePath), 'utf8')
+    const dependencies = pom.split(/<dependency>/).slice(1).map(block => block.split('</dependency>')[0])
+    const found = dependencies.filter(block =>
+      block.includes('<artifactId>' + artifact + '</artifactId>'))
+    const coordinates = found.map(block => ({
+      artifact,
+      group: block.match(/<groupId>([^<]+)<\/groupId>/)?.[1],
+      type: block.match(/<type>([^<]+)<\/type>/)?.[1] || 'jar',
+      classifier: block.match(/<classifier>([^<]+)<\/classifier>/)?.[1] || '',
+    }))
+    assert.ok(found.length > 0, 'missing required dependency ' + artifact)
+    assert.equal(
+      new Set(coordinates.map(c => [c.group, c.artifact, c.type, c.classifier].join(':'))).size,
+      coordinates.length,
+      'duplicate Maven dependency coordinates: ' + relativePath + ' ' + artifact
+    )
+  }
+})
