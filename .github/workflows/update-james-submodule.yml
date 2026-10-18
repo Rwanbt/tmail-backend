@@ -12,6 +12,9 @@ permissions:
 
 jobs:
   createPullRequest:
+    # A workflow_dispatch can target arbitrary refs; never open a privileged
+    # update PR from an unreviewed feature branch instead of default master.
+    if: github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
 
     steps:
@@ -26,7 +29,7 @@ jobs:
           # The checked-out source stays at the exact workflow trigger SHA.
           # This workflow proposes a new Apache James gitlink; it never rebases
           # or silently executes a newer TMail checkout than the reviewed one.
-          git submodule update --remote
+          git submodule update --remote james-project
           git config user.name 'github[bot]'
           git config user.email 'github-bot@linagora.com'
           if [ "$(git diff --submodule=log)" != "" ]; then

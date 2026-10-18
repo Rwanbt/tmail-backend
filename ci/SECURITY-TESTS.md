@@ -17,6 +17,9 @@ node --test ci/test-update-james-workflow.test.cjs
 
 The three baseline tests failed against the unchanged workflow: moving
 action tags, missing explicit token scopes and silent `git reset --hard`.
+An additional RED→GREEN check denies a manually triggered update on
+non-master refs and limits moving submodule updates to `james-project`
+rather than every repository submodule.
 The new `ci-policy.yml` runs these checks on every PR and default-branch
 push, including changes that affect only CI.
 

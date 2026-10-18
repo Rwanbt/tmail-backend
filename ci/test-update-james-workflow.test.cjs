@@ -36,3 +36,9 @@ test('only a PR proposes a pinned James update; checkout is not silently rebased
   assert.doesNotMatch(workflow, /\bgit push\b/)
   assert.doesNotMatch(workflow, /\bgit submodule update --remote\s+&&\s+(mvn|sh|bash)\b/)
 })
+
+test('privileged scheduled/manual update cannot run against a non-master ref or other submodules', () => {
+  assert.match(workflow, /^\s+if: github\.ref == 'refs\/heads\/master'\s*$/m)
+  assert.match(workflow, /git submodule update --remote james-project\b/)
+  assert.doesNotMatch(workflow, /git submodule update --remote\s*\r?\n/)
+})
