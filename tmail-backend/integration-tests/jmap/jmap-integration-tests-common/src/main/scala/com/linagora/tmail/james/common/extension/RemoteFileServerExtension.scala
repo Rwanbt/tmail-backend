@@ -96,6 +96,8 @@ class RemoteFileServerExtension extends BeforeAllCallback with BeforeEachCallbac
     server.retrieveRecordedRequests(request().withMethod("GET").withPath(path))
       .headOption
       .flatMap(recordedRequest => Option(recordedRequest.getFirstHeader(header)))
+      .map(_.trim)
+      .filter(_.nonEmpty)
 
   def serveWithContentLength(path: String, contentLength: Long): Unit =
     server
