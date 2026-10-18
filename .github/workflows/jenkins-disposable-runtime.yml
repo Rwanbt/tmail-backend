@@ -5,6 +5,7 @@ on:
     paths:
       - 'Jenkinsfile'
       - 'ci/jenkins_runtime_canary.py'
+      - 'ci/jenkins-runtime.Dockerfile'
       - '.github/workflows/jenkins-disposable-runtime.yml'
 
 permissions:
@@ -25,16 +26,12 @@ jobs:
           python3 ci/jenkins_runtime_canary.py "$RUNNER_TEMP/jenkins-canary"
       - name: Execute security scenarios inside real isolated Jenkins pipeline engine
         shell: bash
-        env:
-          JFR_IMAGE: jenkins/jenkinsfile-runner:latest
         run: |
           set -euo pipefail
-          docker pull "$JFR_IMAGE"
-          image_digest=$(docker image inspect --format '{{index .RepoDigests 0}}' "$JFR_IMAGE")
-          [[ "$image_digest" == *@sha256:* ]] || { echo 'Missing immutable Jenkins image digest'; exit 1; }
-          echo "Executing disposable Jenkins runtime image $image_digest"
+          docker build --pull -f ci/jenkins-runtime.Dockerfile -t disposable-jenkins-guards .
+          docker run --rm --entrypoint git disposable-jenkins-guards --version
           docker run --rm --network none --cpus 2 --memory 3g --pids-limit 256 \
             --cap-drop ALL --security-opt no-new-privileges \
             --tmpfs /tmp:rw,exec,nosuid,size=1g \
             -v "$RUNNER_TEMP/jenkins-canary:/workspace:ro" \
-            "$image_digest"
+            disposable-jenkins-guards
