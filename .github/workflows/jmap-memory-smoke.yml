@@ -51,7 +51,7 @@ jobs:
           set -euo pipefail
           mvn -B -ntp \
             -pl :memory-jmap-integration-tests -am \
-            -Dtest=MemoryEmailGetMethodTest,MemoryEmailSetMethodTest,MemoryMailboxSetMethodTest,MemoryTeamMailboxMemberSetMethodTest,MemoryTicketAuthenticationTest,MemoryUnauthenticatedBlobAccessSetMethodTest,MemoryLinagoraEmailSendMethodTest,MemoryUploadFromUrlTest \
+            -Dtest=MemoryEmailGetMethodTest,MemoryEmailSetMethodTest,MemoryEmailSubmissionSetMethodTest,MemoryMailboxSetMethodTest,MemoryTeamMailboxMemberSetMethodTest,MemoryTicketAuthenticationTest,MemoryUnauthenticatedBlobAccessSetMethodTest,MemoryLinagoraEmailSendMethodTest,MemoryUploadFromUrlTest \
             -Dsurefire.failIfNoSpecifiedTests=false \
             test
       - name: Confirm JMAP test methods genuinely executed
@@ -61,6 +61,7 @@ jobs:
             tmail-backend/integration-tests/jmap/memory-jmap-integration-tests/target/surefire-reports \
             MemoryEmailGetMethodTest \
             MemoryEmailSetMethodTest \
+            MemoryEmailSubmissionSetMethodTest \
             MemoryMailboxSetMethodTest \
             MemoryTeamMailboxMemberSetMethodTest \
             MemoryTicketAuthenticationTest \
