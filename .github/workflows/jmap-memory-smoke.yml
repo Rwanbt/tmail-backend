@@ -4,7 +4,8 @@ on:
   pull_request:
     paths:
       - '.github/workflows/jmap-memory-smoke.yml'
-      - 'tmail-backend/integration-tests/jmap/**'
+      - 'tmail-backend/**'
+      - 'james-project'
       - 'pom.xml'
       - '.gitmodules'
       - 'ci/verify_jmap_surefire.py'
@@ -43,14 +44,14 @@ jobs:
           python3 -m unittest discover -s ci -p 'test_check_maven_dependencies.py'
           python3 ci/check_maven_dependencies.py tmail-backend
           python3 -m unittest discover -s ci -p 'test_verify_jmap_surefire.py'
-      - name: Execute real in-memory JMAP email, mailbox, ACL, auth and blob suites
+      - name: Execute real in-memory JMAP email, mailbox, ACL, auth, send and blob suites
         timeout-minutes: 50
         shell: bash
         run: |
           set -euo pipefail
           mvn -B -ntp \
             -pl :memory-jmap-integration-tests -am \
-            -Dtest=MemoryEmailGetMethodTest,MemoryEmailSetMethodTest,MemoryMailboxSetMethodTest,MemoryTeamMailboxMemberSetMethodTest,MemoryTicketAuthenticationTest,MemoryUnauthenticatedBlobAccessSetMethodTest \
+            -Dtest=MemoryEmailGetMethodTest,MemoryEmailSetMethodTest,MemoryMailboxSetMethodTest,MemoryTeamMailboxMemberSetMethodTest,MemoryTicketAuthenticationTest,MemoryUnauthenticatedBlobAccessSetMethodTest,MemoryLinagoraEmailSendMethodTest,MemoryUploadFromUrlTest \
             -Dsurefire.failIfNoSpecifiedTests=false \
             test
       - name: Confirm JMAP test methods genuinely executed
@@ -63,7 +64,16 @@ jobs:
             MemoryMailboxSetMethodTest \
             MemoryTeamMailboxMemberSetMethodTest \
             MemoryTicketAuthenticationTest \
-            MemoryUnauthenticatedBlobAccessSetMethodTest
+            MemoryUnauthenticatedBlobAccessSetMethodTest \
+            MemoryLinagoraEmailSendMethodTest \
+            MemoryUploadFromUrlTest \
+            --require MemoryLinagoraEmailSendMethodTest:emailSendShouldSendMailSuccessfully \
+            --require MemoryLinagoraEmailSendMethodTest:emailSendShouldSupportAttachment \
+            --require MemoryLinagoraEmailSendMethodTest:methodShouldRejectOtherAccountIds \
+            --require MemoryUploadFromUrlTest:shouldImportRemoteFileAsAUsableJmapAttachment \
+            --require MemoryUploadFromUrlTest:shouldRejectSourceOutsideAllowedSources \
+            --require MemoryUploadFromUrlTest:uploadFromUrlShouldRejectUnauthenticatedRequest \
+            --require MemoryUploadFromUrlTest:shouldRejectUploadToNonDelegatedAccount
       - name: Preserve real Maven test evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
