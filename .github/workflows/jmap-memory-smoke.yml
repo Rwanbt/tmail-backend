@@ -67,6 +67,12 @@ jobs:
             MemoryUnauthenticatedBlobAccessSetMethodTest \
             MemoryLinagoraEmailSendMethodTest \
             MemoryUploadFromUrlTest \
+            --require MemoryEmailGetMethodTest:emailGetShouldFailWhenWrongAccountId \
+            --require MemoryEmailGetMethodTest:shouldBeAbleToDownloadAttachmentBaseOnFastViewWithAttachmentsMetadataResult \
+            --require MemoryEmailSetMethodTest:emailSetShouldSucceedWhenInvalidToMailAddressAndHaveDraftKeyword \
+            --require MemoryEmailSetMethodTest:createShouldAddAnEmailInTargetMailbox \
+            --require MemoryEmailSetMethodTest:createShouldFailWhenAttachmentDoesNotBelongToUser \
+            --require MemoryEmailSetMethodTest:createShouldFailWhenInsertRightIsRemovedByANegativeAclEntry \
             --require MemoryLinagoraEmailSendMethodTest:emailSendShouldSendMailSuccessfully \
             --require MemoryLinagoraEmailSendMethodTest:emailSendShouldSupportAttachment \
             --require MemoryLinagoraEmailSendMethodTest:methodShouldRejectOtherAccountIds \
