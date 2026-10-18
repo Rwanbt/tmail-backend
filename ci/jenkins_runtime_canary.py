@@ -32,7 +32,8 @@ node {
             git -C consumer config user.email 'disposable@example.invalid'
             mkdir -p consumer/ci
             echo changed > consumer/ci/test-guard.sh
-            git -C consumer add ci/test-guard.sh
+            echo untrusted > consumer/Jenkinsfile
+            git -C consumer add ci/test-guard.sh Jenkinsfile
             git -C consumer commit -qm contributor
         '''
 
@@ -40,11 +41,17 @@ node {
             withEnv(['CHANGE_TARGET=master']) {
                 fetchChangeTarget()
                 def offending = changedCiFiles()
-                if (!offending.contains('ci/test-guard.sh')) {
+                if (!offending.contains('ci/test-guard.sh') || !offending.contains('Jenkinsfile')) {
                     error('Trusted Jenkinsfile failed to detect contributor CI change')
                 }
             }
-            withEnv(['CHANGE_TARGET=master$(touch /tmp/jenkins-canary-injected)']) {
+            for (String target : [
+                'master$(touch /tmp/jenkins-canary-injected)',
+                'master; touch /tmp/jenkins-canary-injected',
+                '../master',
+                '-c core.sshCommand=evil'
+            ]) {
+              withEnv(["CHANGE_TARGET=${target}"]) {
                 def rejected = false
                 try {
                     fetchChangeTarget()
@@ -54,6 +61,7 @@ node {
                 if (!rejected) {
                     error('Unsafe CHANGE_TARGET was accepted')
                 }
+              }
             }
             sh 'test ! -e /tmp/jenkins-canary-injected'
         }
