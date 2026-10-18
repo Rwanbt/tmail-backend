@@ -116,6 +116,22 @@ trait UploadFromUrlContract {
   }
 
   @Test
+  def shouldNeverForwardJmapCredentialsToRemoteFileServer(): Unit = {
+    // The local JMAP route receives Basic auth; the remote Drive GET must
+    // never inherit JMAP credentials or any user cookie.
+    val remotePath = "/files/credentials-must-stay-local"
+    val remoteContent = "safe downloadable document".getBytes(StandardCharsets.UTF_8)
+    remoteFileServer.serve(remotePath, remoteContent, "text/plain")
+
+    importRemoteFile(remotePath, remoteContent.length)
+
+    assertThat(remoteFileServer.getRequestCount(remotePath)).isEqualTo(1)
+    assertThat(remoteFileServer.getFirstRequestHeader(remotePath, "Authorization")).isEqualTo(None)
+    assertThat(remoteFileServer.getFirstRequestHeader(remotePath, "Cookie")).isEqualTo(None)
+    assertThat(remoteFileServer.getFirstRequestHeader(remotePath, "Proxy-Authorization")).isEqualTo(None)
+  }
+
+  @Test
   def shouldUseRemoteContentTypeWhenRequestContentTypeIsMissing(server: GuiceJamesServer): Unit = {
     // Serve a remote file that advertises its media type.
     val remotePath = "/files/content-type-from-source.pdf"
@@ -206,6 +222,33 @@ trait UploadFromUrlContract {
       .body("status", equalTo(SC_INTERNAL_SERVER_ERROR))
       .body("type", equalTo("about:blank"))
       .body("detail", equalTo("The remote file could not be uploaded"))
+
+    // The upload endpoint must not amplify an upstream failure by retrying GET.
+    assertThat(remoteFileServer.getRequestCount(remotePath)).isEqualTo(1)
+  }
+
+  @Test
+  def shouldNotFollowRemoteRedirectEvenWhenTargetIsOnAllowedHost(): Unit = {
+    // Following a 302 would silently change the source of an authenticated
+    // JMAP attachment import. The downloader must reject the first response.
+    val redirectPath = "/files/redirect-to-private-document"
+    val targetPath = "/files/private-document"
+    remoteFileServer.serveRedirect(redirectPath, remoteFileServer.url(targetPath))
+    remoteFileServer.serve(targetPath, "unapproved content".getBytes(StandardCharsets.UTF_8), "text/plain")
+
+    `given`()
+      .basePath("")
+      .header(ACCEPT.toString, ACCEPT_RFC8621_VERSION_HEADER)
+      .header(CONTENT_LOCATION.toString, remoteFileServer.url(redirectPath))
+    .when()
+      .post(s"/upload-from-url/$accountId")
+    .`then`()
+      .statusCode(SC_INTERNAL_SERVER_ERROR)
+      .contentType(JSON)
+      .body("detail", equalTo("The remote file could not be uploaded"))
+
+    assertThat(remoteFileServer.getRequestCount(redirectPath)).isEqualTo(1)
+    assertThat(remoteFileServer.getRequestCount(targetPath)).isEqualTo(0)
   }
 
   @Test
@@ -233,12 +276,14 @@ trait UploadFromUrlContract {
 
   @Test
   def uploadFromUrlShouldRejectUnauthenticatedRequest(): Unit = {
+    val remotePath = "/files/unauthenticated-must-not-fetch"
+    remoteFileServer.serve(remotePath, "secret".getBytes(StandardCharsets.UTF_8), "text/plain")
     // Submit an upload request without the credentials from the shared request specification.
     `given`()
       .auth().none()
       .basePath("")
       .header(ACCEPT.toString, ACCEPT_RFC8621_VERSION_HEADER)
-      .header(CONTENT_LOCATION.toString, remoteFileServer.url("/files/report.pdf"))
+      .header(CONTENT_LOCATION.toString, remoteFileServer.url(remotePath))
     .when()
       .post(s"/upload-from-url/$accountId")
 
@@ -250,10 +295,15 @@ trait UploadFromUrlContract {
       .body("status", equalTo(SC_UNAUTHORIZED))
       .body("type", equalTo("about:blank"))
       .body("detail", equalTo("Authentication failed"))
+
+    // Authorization must be enforced before the downloader performs I/O.
+    assertThat(remoteFileServer.getRequestCount(remotePath)).isEqualTo(0)
   }
 
   @Test
   def shouldRejectUploadToNonDelegatedAccount(server: GuiceJamesServer): Unit = {
+    val remotePath = "/files/non-delegated-must-not-fetch"
+    remoteFileServer.serve(remotePath, "secret".getBytes(StandardCharsets.UTF_8), "text/plain")
     // Create a target account to which the authenticated user has no delegated access.
     val targetUsername = Username.fromLocalPartWithDomain(s"alice${UUID.randomUUID().toString.replace("-", "").take(8)}", DOMAIN)
     val targetAccountId = AccountId.from(targetUsername).toOption.get.id.value
@@ -263,7 +313,7 @@ trait UploadFromUrlContract {
     `given`()
       .basePath("")
       .header(ACCEPT.toString, ACCEPT_RFC8621_VERSION_HEADER)
-      .header(CONTENT_LOCATION.toString, remoteFileServer.url("/files/report.pdf"))
+      .header(CONTENT_LOCATION.toString, remoteFileServer.url(remotePath))
     .when()
       .post(s"/upload-from-url/$targetAccountId")
 
@@ -274,6 +324,8 @@ trait UploadFromUrlContract {
       .body("status", equalTo(SC_FORBIDDEN))
       .body("type", equalTo("about:blank"))
       .body("detail", equalTo("Upload to this account is forbidden"))
+
+    assertThat(remoteFileServer.getRequestCount(remotePath)).isEqualTo(0)
   }
 
   private def importRemoteFile(remotePath: String, expectedSize: Int): String = {

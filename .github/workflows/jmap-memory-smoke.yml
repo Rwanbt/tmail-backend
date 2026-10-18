@@ -77,6 +77,9 @@ jobs:
             --require MemoryLinagoraEmailSendMethodTest:emailSendShouldSupportAttachment \
             --require MemoryLinagoraEmailSendMethodTest:methodShouldRejectOtherAccountIds \
             --require MemoryUploadFromUrlTest:shouldImportRemoteFileAsAUsableJmapAttachment \
+            --require MemoryUploadFromUrlTest:shouldNeverForwardJmapCredentialsToRemoteFileServer \
+            --require MemoryUploadFromUrlTest:shouldNotFollowRemoteRedirectEvenWhenTargetIsOnAllowedHost \
+            --require MemoryUploadFromUrlTest:shouldReturnInternalServerErrorWhenRemoteReturnsNonSuccess \
             --require MemoryUploadFromUrlTest:shouldRejectSourceOutsideAllowedSources \
             --require MemoryUploadFromUrlTest:uploadFromUrlShouldRejectUnauthenticatedRequest \
             --require MemoryUploadFromUrlTest:shouldRejectUploadToNonDelegatedAccount

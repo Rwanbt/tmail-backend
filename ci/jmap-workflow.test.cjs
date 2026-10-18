@@ -31,6 +31,9 @@ test('a Maven zero-tests success is never presented as JMAP integration PASS', (
   assert.match(workflow, /--require MemoryLinagoraEmailSendMethodTest:methodShouldRejectOtherAccountIds/)
   assert.match(workflow, /--require MemoryUploadFromUrlTest:shouldRejectSourceOutsideAllowedSources/)
   assert.match(workflow, /--require MemoryUploadFromUrlTest:shouldRejectUploadToNonDelegatedAccount/)
+  assert.match(workflow, /--require MemoryUploadFromUrlTest:shouldNeverForwardJmapCredentialsToRemoteFileServer/)
+  assert.match(workflow, /--require MemoryUploadFromUrlTest:shouldNotFollowRemoteRedirectEvenWhenTargetIsOnAllowedHost/)
+  assert.match(workflow, /--require MemoryUploadFromUrlTest:shouldReturnInternalServerErrorWhenRemoteReturnsNonSuccess/)
   assert.match(workflow, /if: always\(\)/)
 })
 
