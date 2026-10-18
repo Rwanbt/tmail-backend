@@ -4,7 +4,7 @@
 // below is read from the workspace, which holds the contributor's code, so a
 // pull request changing them would be running its own code inside our CI.
 def protectedCiPaths() {
-    return ['Jenkinsfile', 'ci/', '.mvn/', '.gitmodules']
+    return ['Jenkinsfile', 'ci/', '.mvn/', '.gitmodules', 'pom.xml', 'james-project', 'tmail-backend/pom.xml']
 }
 
 // A contributor is trusted when they can already push to the repository: either
@@ -47,14 +47,22 @@ def fetchChangeTarget() {
     if (!env.CHANGE_TARGET) {
         error('CHANGE_TARGET is not set: cannot determine what this change request modifies.')
     }
-    sh "git fetch --no-tags --quiet origin '+refs/heads/${env.CHANGE_TARGET}:refs/remotes/origin/${env.CHANGE_TARGET}'"
+    // CHANGE_TARGET is repository data. Never interpolate it into shell code.
+    withEnv(["SAFE_CHANGE_TARGET=${env.CHANGE_TARGET}"]) {
+        sh '''set -eu
+            git check-ref-format --branch "$SAFE_CHANGE_TARGET"
+            git fetch --no-tags --quiet origin "+refs/heads/$SAFE_CHANGE_TARGET:refs/remotes/origin/$SAFE_CHANGE_TARGET"
+        '''
+    }
 }
 
 def changedCiFiles() {
-    def changed = sh(
-        script: "git diff --name-only 'origin/${env.CHANGE_TARGET}...HEAD'",
-        returnStdout: true
-    )
+    def changed = withEnv(["SAFE_CHANGE_TARGET=${env.CHANGE_TARGET}"]) {
+        sh(
+            script: 'git diff --name-only "origin/$SAFE_CHANGE_TARGET...HEAD"',
+            returnStdout: true
+        )
+    }
 
     def offending = []
     for (String path : changed.split('\n')) {
@@ -90,18 +98,24 @@ def trustedReportScript() {
     // anything else running on this shared agent, and what lands there is about
     // to be run with the GitHub token.
     def tmpDir = env.WORKSPACE_TMP ?: "${env.WORKSPACE}@tmp"
-    def scriptPath = sh(
-        returnStdout: true,
-        script: "mkdir -p '${tmpDir}' && mktemp '${tmpDir}/report-build-failure-XXXXXXXX.sh'"
-    ).trim()
+    def scriptPath = withEnv(["TRUSTED_TMP_DIR=${tmpDir}"]) {
+        sh(
+            returnStdout: true,
+            script: 'mkdir -p "$TRUSTED_TMP_DIR" && mktemp "$TRUSTED_TMP_DIR/report-build-failure-XXXXXXXX.sh"'
+        ).trim()
+    }
 
-    def extracted = sh(
-        returnStatus: true,
-        script: "git show 'origin/${env.CHANGE_TARGET}:ci/report-build-failure.sh' > '${scriptPath}'"
-    )
+    def extracted = withEnv(["SAFE_CHANGE_TARGET=${env.CHANGE_TARGET}", "TRUSTED_REPORT_TEMP=${scriptPath}"]) {
+        sh(
+            returnStatus: true,
+            script: 'git show "origin/$SAFE_CHANGE_TARGET:ci/report-build-failure.sh" > "$TRUSTED_REPORT_TEMP"'
+        )
+    }
     if (extracted != 0) {
         echo "No report script on ${env.CHANGE_TARGET}: the build failure is not reported."
-        sh "rm -f '${scriptPath}'"
+        withEnv(["TRUSTED_REPORT_TEMP=${scriptPath}"]) {
+            sh 'rm -f -- "$TRUSTED_REPORT_TEMP"'
+        }
         return null
     }
     return scriptPath
@@ -139,7 +153,9 @@ def reportBuildFailure() {
         echo "Could not report the build failure: ${e.message}"
     } finally {
         if (reportScript != null && reportScript != 'ci/report-build-failure.sh') {
-            sh "rm -f '${reportScript}'"
+            withEnv(["TRUSTED_REPORT_TEMP=${reportScript}"]) {
+                sh 'rm -f -- "$TRUSTED_REPORT_TEMP"'
+            }
         }
     }
 }
@@ -384,14 +400,14 @@ Please drop these changes from the pull request, or ask a linagora member to car
               withCredentials([usernamePassword(credentialsId: 'dockerHub',
                       usernameVariable: 'DOCKER_HUB_CREDENTIAL_USR', passwordVariable: 'DOCKER_HUB_CREDENTIAL_PSW')]) {
                 dir("tmail-backend") {
-                  sh 'mvn -Pci jib:build -Djib.to.auth.username=$DOCKER_HUB_CREDENTIAL_USR -Djib.to.auth.password=$DOCKER_HUB_CREDENTIAL_PSW -Djib.to.tags=distributed-$DOCKER_TAG -pl apps/distributed -X'
-                  sh 'mvn -Pci jib:build -Djib.to.auth.username=$DOCKER_HUB_CREDENTIAL_USR -Djib.to.auth.password=$DOCKER_HUB_CREDENTIAL_PSW -Djib.to.tags=memory-$DOCKER_TAG -pl apps/memory -X'
-                  sh 'mvn -Pci jib:build -Djib.to.auth.username=$DOCKER_HUB_CREDENTIAL_USR -Djib.to.auth.password=$DOCKER_HUB_CREDENTIAL_PSW -Djib.to.tags=postgresql-$DOCKER_TAG -pl apps/postgres -X'
-                  sh 'mvn -Pci jib:build -Djib.to.auth.username=$DOCKER_HUB_CREDENTIAL_USR -Djib.to.auth.password=$DOCKER_HUB_CREDENTIAL_PSW -Djib.to.tags=$DOCKER_TAG -pl apps/migration-proxy -X'
+                  sh 'mvn -B -ntp -Pci jib:build -Djib.to.auth.username=$DOCKER_HUB_CREDENTIAL_USR -Djib.to.auth.password=$DOCKER_HUB_CREDENTIAL_PSW -Djib.to.tags=distributed-$DOCKER_TAG -pl apps/distributed'
+                  sh 'mvn -B -ntp -Pci jib:build -Djib.to.auth.username=$DOCKER_HUB_CREDENTIAL_USR -Djib.to.auth.password=$DOCKER_HUB_CREDENTIAL_PSW -Djib.to.tags=memory-$DOCKER_TAG -pl apps/memory'
+                  sh 'mvn -B -ntp -Pci jib:build -Djib.to.auth.username=$DOCKER_HUB_CREDENTIAL_USR -Djib.to.auth.password=$DOCKER_HUB_CREDENTIAL_PSW -Djib.to.tags=postgresql-$DOCKER_TAG -pl apps/postgres'
+                  sh 'mvn -B -ntp -Pci jib:build -Djib.to.auth.username=$DOCKER_HUB_CREDENTIAL_USR -Djib.to.auth.password=$DOCKER_HUB_CREDENTIAL_PSW -Djib.to.tags=$DOCKER_TAG -pl apps/migration-proxy'
 
                   // Build tmail distributed AI image
                   sh 'cp tmail-third-party/ai-bot/target/tmail-ai-bot-jar-with-dependencies.jar apps/distributed/src/main/extensions-jars'
-                  sh 'mvn -Pci jib:build -Djib.to.auth.username=$DOCKER_HUB_CREDENTIAL_USR -Djib.to.auth.password=$DOCKER_HUB_CREDENTIAL_PSW -Djib.to.tags=distributed-ai-$DOCKER_TAG -pl apps/distributed -X'
+                  sh 'mvn -B -ntp -Pci jib:build -Djib.to.auth.username=$DOCKER_HUB_CREDENTIAL_USR -Djib.to.auth.password=$DOCKER_HUB_CREDENTIAL_PSW -Djib.to.tags=distributed-ai-$DOCKER_TAG -pl apps/distributed'
                 }
               }
             }
