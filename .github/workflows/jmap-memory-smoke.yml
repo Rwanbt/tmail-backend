@@ -7,6 +7,8 @@ on:
       - 'tmail-backend/integration-tests/jmap/**'
       - 'pom.xml'
       - '.gitmodules'
+      - 'ci/verify_jmap_surefire.py'
+      - 'ci/test_verify_jmap_surefire.py'
   workflow_dispatch:
 
 permissions:
@@ -40,37 +42,28 @@ jobs:
         run: |
           python3 -m unittest discover -s ci -p 'test_check_maven_dependencies.py'
           python3 ci/check_maven_dependencies.py tmail-backend
-      - name: Execute real in-memory JMAP Email/get and Email/set suites
+          python3 -m unittest discover -s ci -p 'test_verify_jmap_surefire.py'
+      - name: Execute real in-memory JMAP email, mailbox, ACL, auth and blob suites
         timeout-minutes: 50
         shell: bash
         run: |
           set -euo pipefail
           mvn -B -ntp \
             -pl :memory-jmap-integration-tests -am \
-            -Dtest=MemoryEmailGetMethodTest,MemoryEmailSetMethodTest \
+            -Dtest=MemoryEmailGetMethodTest,MemoryEmailSetMethodTest,MemoryMailboxSetMethodTest,MemoryTeamMailboxMemberSetMethodTest,MemoryTicketAuthenticationTest,MemoryUnauthenticatedBlobAccessSetMethodTest \
             -Dsurefire.failIfNoSpecifiedTests=false \
             test
       - name: Confirm JMAP test methods genuinely executed
         shell: bash
         run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          import xml.etree.ElementTree as ET
-          location = Path('tmail-backend/integration-tests/jmap/memory-jmap-integration-tests/target/surefire-reports')
-          for suite in ('MemoryEmailGetMethodTest', 'MemoryEmailSetMethodTest'):
-              reports = list(location.glob(f'*{suite}*.xml'))
-              assert reports, f'No executed {suite} Surefire XML in {location}'
-              tests = failures = errors = skipped = 0
-              for report in reports:
-                  node = ET.parse(report).getroot()
-                  tests += int(node.get('tests', 0))
-                  failures += int(node.get('failures', 0))
-                  errors += int(node.get('errors', 0))
-                  skipped += int(node.get('skipped', 0))
-              assert tests > skipped, f'No test methods actually executed in {suite}: {tests=} {skipped=}'
-              assert not failures and not errors, f'JMAP suite failed {suite}: {failures=} {errors=}'
-              print(f'PASS: {tests-skipped} real {suite} test methods; {skipped} skipped')
-          PY
+          python3 ci/verify_jmap_surefire.py \
+            tmail-backend/integration-tests/jmap/memory-jmap-integration-tests/target/surefire-reports \
+            MemoryEmailGetMethodTest \
+            MemoryEmailSetMethodTest \
+            MemoryMailboxSetMethodTest \
+            MemoryTeamMailboxMemberSetMethodTest \
+            MemoryTicketAuthenticationTest \
+            MemoryUnauthenticatedBlobAccessSetMethodTest
       - name: Preserve real Maven test evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7

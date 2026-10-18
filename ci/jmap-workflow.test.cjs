@@ -17,11 +17,11 @@ test('real JMAP smoke is isolated, nonprivileged and checks pinned James provena
 
 test('a Maven zero-tests success is never presented as JMAP integration PASS', () => {
   assert.match(workflow, /-pl :memory-jmap-integration-tests -am/)
-  assert.match(workflow, /-Dtest=MemoryEmailGetMethodTest,MemoryEmailSetMethodTest/)
-  assert.match(workflow, /for suite in \('MemoryEmailGetMethodTest', 'MemoryEmailSetMethodTest'\)/)
-  assert.match(workflow, /reports = list\(location\.glob\(f'\*\{suite\}\*\.xml'\)\)/)
-  assert.match(workflow, /assert tests > skipped/)
-  assert.match(workflow, /assert not failures and not errors/)
+  assert.match(workflow, /-Dtest=MemoryEmailGetMethodTest,MemoryEmailSetMethodTest,MemoryMailboxSetMethodTest,MemoryTeamMailboxMemberSetMethodTest,MemoryTicketAuthenticationTest,MemoryUnauthenticatedBlobAccessSetMethodTest/)
+  assert.match(workflow, /python3 ci\/verify_jmap_surefire\.py/)
+  assert.match(workflow, /MemoryUnauthenticatedBlobAccessSetMethodTest/)
+  assert.match(workflow, /MemoryTeamMailboxMemberSetMethodTest/)
+  assert.match(workflow, /MemoryTicketAuthenticationTest/)
   assert.match(workflow, /if: always\(\)/)
 })
 
