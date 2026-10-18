@@ -3,6 +3,7 @@ const assert = require('node:assert/strict')
 const { readFileSync } = require('node:fs')
 const { join } = require('node:path')
 const workflow = readFileSync(join(__dirname, '..', '.github/workflows/jmap-memory-smoke.yml'), 'utf8')
+const modulePom = readFileSync(join(__dirname, '..', 'tmail-backend', 'pom.xml'), 'utf8')
 
 test('real JMAP smoke is isolated, nonprivileged and checks pinned James provenance', () => {
   assert.match(workflow, /submodules: recursive/)
@@ -21,4 +22,11 @@ test('a Maven zero-tests success is never presented as JMAP integration PASS', (
   assert.match(workflow, /assert tests > skipped/)
   assert.match(workflow, /assert not failures and not errors/)
   assert.match(workflow, /if: always\(\)/)
+})
+
+test('real Maven reactor does not contain duplicated managed MongoDB coordinates', () => {
+  const managedDependencies = modulePom.match(/<dependencyManagement>([\s\S]*?)<\/dependencyManagement>/)?.[1] ?? ''
+  assert.ok(managedDependencies.length, 'missing reactor dependencyManagement')
+  const coordinates = [...managedDependencies.matchAll(/<dependency>\s*<groupId>org\.mongodb<\/groupId>\s*<artifactId>mongodb-driver-reactivestreams<\/artifactId>/g)]
+  assert.equal(coordinates.length, 1, 'Maven rejects duplicate dependency coordinates before JMAP can run')
 })
