@@ -36,6 +36,10 @@ jobs:
           echo "Apache James exact commit: $actual"
           java -version
           mvn -version
+      - name: Reject duplicate Maven dependencies before reactor resolution
+        run: |
+          python3 -m unittest discover -s ci -p 'test_check_maven_dependencies.py'
+          python3 ci/check_maven_dependencies.py tmail-backend
       - name: Execute real in-memory JMAP Email/get suite
         timeout-minutes: 50
         shell: bash
