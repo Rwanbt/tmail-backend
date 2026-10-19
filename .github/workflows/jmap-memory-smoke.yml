@@ -74,6 +74,7 @@ jobs:
             --require MemoryEmailSetMethodTest:createShouldAddAnEmailInTargetMailbox \
             --require MemoryEmailSetMethodTest:createShouldFailWhenAttachmentDoesNotBelongToUser \
             --require MemoryEmailSetMethodTest:createShouldFailWhenInsertRightIsRemovedByANegativeAclEntry \
+            --require MemoryMailboxSetMethodTest:webSocketShouldPushNewMessageWhenChangeSubscriptionOfMailbox \
             --require MemoryLinagoraEmailSendMethodTest:emailSendShouldSendMailSuccessfully \
             --require MemoryLinagoraEmailSendMethodTest:emailSendShouldSupportAttachment \
             --require MemoryLinagoraEmailSendMethodTest:methodShouldRejectOtherAccountIds \

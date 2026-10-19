@@ -36,7 +36,6 @@ import org.apache.james.JamesServerExtension;
 import org.apache.james.jmap.rfc8621.contract.MailboxSetMethodContract;
 import org.apache.james.mailbox.inmemory.InMemoryId;
 import org.apache.james.mailbox.model.MailboxId;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
 
@@ -71,8 +70,7 @@ public class MemoryMailboxSetMethodTest implements MailboxSetMethodContract {
 
     @Override
     @Test
-    @Disabled
-    // TODO Need to fix
     public void webSocketShouldPushNewMessageWhenChangeSubscriptionOfMailbox(GuiceJamesServer server) {
+        MailboxSetMethodContract.super.webSocketShouldPushNewMessageWhenChangeSubscriptionOfMailbox(server);
     }
 }

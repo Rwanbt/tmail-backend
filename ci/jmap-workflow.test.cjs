@@ -52,6 +52,7 @@ test('a Maven zero-tests success is never presented as JMAP integration PASS', (
   assert.match(workflow, /--require MemoryEmailSetMethodTest:emailSetShouldSucceedWhenInvalidToMailAddressAndHaveDraftKeyword/)
   assert.match(workflow, /--require MemoryEmailSetMethodTest:createShouldFailWhenAttachmentDoesNotBelongToUser/)
   assert.match(workflow, /--require MemoryEmailSetMethodTest:createShouldFailWhenInsertRightIsRemovedByANegativeAclEntry/)
+  assert.match(workflow, /--require MemoryMailboxSetMethodTest:webSocketShouldPushNewMessageWhenChangeSubscriptionOfMailbox/)
   assert.match(workflow, /--require MemoryLinagoraEmailSendMethodTest:methodShouldRejectOtherAccountIds/)
   assert.match(workflow, /--require MemoryUploadFromUrlTest:shouldRejectSourceOutsideAllowedSources/)
   assert.match(workflow, /--require MemoryUploadFromUrlTest:shouldRejectUploadToNonDelegatedAccount/)
