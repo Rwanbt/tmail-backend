@@ -2,12 +2,15 @@ package com.linagora.tmail.james;
 
 import static org.apache.james.data.UsersRepositoryModuleChooser.Implementation.DEFAULT;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.WebSocket;
+import java.net.http.WebSocketHandshakeException;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
+import java.util.concurrent.CompletionException;
 
 import org.apache.james.GuiceJamesServer;
 import org.apache.james.JamesServerBuilder;
@@ -60,6 +63,21 @@ public class MemoryWebSocketTransportEnabledTest {
 
             assertThat(socket.getSubprotocol()).isEqualTo("jmap");
             socket.abort();
+        }
+    }
+
+    @Test
+    void enabledWebSocketRejectsUnauthenticatedUpgrade(GuiceJamesServer server) throws Exception {
+        int port = server.getProbe(JmapGuiceProbe.class).getJmapPort().getValue();
+        try (HttpClient client = HttpClient.newHttpClient()) {
+            CompletionException failure = assertThrows(CompletionException.class, () ->
+                client.newWebSocketBuilder()
+                    .subprotocols("jmap")
+                    .buildAsync(URI.create("ws://127.0.0.1:" + port + "/jmap/ws"), new WebSocket.Listener() { })
+                    .join());
+            assertThat(failure.getCause()).isInstanceOf(WebSocketHandshakeException.class);
+            int status = ((WebSocketHandshakeException) failure.getCause()).getResponse().statusCode();
+            assertThat(status).isBetween(400, 499);
         }
     }
 }

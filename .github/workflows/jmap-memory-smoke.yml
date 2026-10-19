@@ -83,6 +83,7 @@ jobs:
             --require MemoryWebPushDisabledTest:pushSubscriptionSetShouldBeRejected \
             --require MemoryWebSocketTransportDisabledTest:disabledWebSocketDoesNotDisableAuthenticatedJmapHttp \
             --require MemoryWebSocketTransportEnabledTest:enabledWebSocketAcceptsAuthenticatedUpgrade \
+            --require MemoryWebSocketTransportEnabledTest:enabledWebSocketRejectsUnauthenticatedUpgrade \
             --require MemoryLinagoraEmailSendMethodTest:emailSendShouldSendMailSuccessfully \
             --require MemoryLinagoraEmailSendMethodTest:emailSendShouldSupportAttachment \
             --require MemoryLinagoraEmailSendMethodTest:methodShouldRejectOtherAccountIds \
