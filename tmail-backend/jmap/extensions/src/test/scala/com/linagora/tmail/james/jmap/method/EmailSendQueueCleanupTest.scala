@@ -46,4 +46,38 @@ class EmailSendQueueCleanupTest {
     subscription.dispose()
     assertThat(cleanedUp.await(5, TimeUnit.SECONDS)).isTrue()
   }
+
+  @Test
+  def shouldNotReportAnAcceptedMailAsFailedWhenCleanupThrows(): Unit = {
+    val cleanupCalls = new AtomicInteger()
+    val result = EmailSendMethod.withResourceCleanup(
+      "mail",
+      (_: String) => Mono.just("accepted"),
+      (_: String) => {
+        cleanupCalls.incrementAndGet()
+        throw new IllegalStateException("MIME disposal failed")
+      })
+
+    // The mail is already accepted by the queue; reporting failure invites
+    // client retries which can deliver the same email twice.
+    assertThat(result.block()).isEqualTo("accepted")
+    assertThat(cleanupCalls.get()).isEqualTo(1)
+  }
+
+  @Test
+  def shouldKeepTheEnqueueFailureWhenCleanupAlsoThrows(): Unit = {
+    val cleanupCalls = new AtomicInteger()
+    val result = EmailSendMethod.withResourceCleanup(
+      "mail",
+      (_: String) => Mono.error[String](new IllegalStateException("enqueue failed")),
+      (_: String) => {
+        cleanupCalls.incrementAndGet()
+        throw new IllegalStateException("MIME disposal failed")
+      })
+
+    assertThatThrownBy(() => result.block())
+      .isInstanceOf(classOf[IllegalStateException])
+      .hasMessage("enqueue failed")
+    assertThat(cleanupCalls.get()).isEqualTo(1)
+  }
 }

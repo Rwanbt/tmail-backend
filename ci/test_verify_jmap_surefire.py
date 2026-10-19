@@ -43,6 +43,19 @@ class SurefireVerificationTest(unittest.TestCase):
     def test_executed_contract_passes(self):
         self.assertEqual(len(verify(self.directory, [self.suite])), 1)
 
+    def test_exact_qualified_extension_suite_executes(self):
+        suite = "com.linagora.tmail.james.jmap.method.EmailSendQueueCleanupTest"
+        self.name = suite
+        self.report.unlink()
+        self.report = self.directory / f"TEST-{suite}.xml"
+        self.write_report(method="shouldReleaseMailAfterSuccessfulEnqueue")
+        self.assertEqual(len(verify(self.directory, [suite],
+                                    [f"{suite}:shouldReleaseMailAfterSuccessfulEnqueue"])), 1)
+
+    def test_arbitrary_qualified_suite_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, "Unexpected JMAP test namespace"):
+            verify(self.directory, ["org.unrelated.MailCleanupTest"])
+
     def test_missing_report_rejected(self):
         self.report.unlink()
         with self.assertRaisesRegex(ValueError, "Missing exact Surefire report"):

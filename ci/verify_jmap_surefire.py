@@ -22,7 +22,15 @@ def verify(report_directory: Path, suites: list[str], required: list[str] | None
 
     summaries = []
     for suite in suites:
-        expected_name = f"com.linagora.tmail.james.{suite}"
+        # Integration contracts use the direct james package. Unit tests in
+        # extensions use nested packages; require their exact qualified name
+        # instead of guessing an incorrect Surefire report filename.
+        if "." in suite:
+            if not suite.startswith("com.linagora.tmail.james."):
+                raise ValueError(f"Unexpected JMAP test namespace: {suite}")
+            expected_name = suite
+        else:
+            expected_name = f"com.linagora.tmail.james.{suite}"
         report = report_directory / f"TEST-{expected_name}.xml"
         if not report.is_file():
             raise ValueError(f"Missing exact Surefire report for {suite}: {report}")

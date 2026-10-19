@@ -88,10 +88,12 @@ jobs:
         run: |
           python3 ci/verify_jmap_surefire.py \
             tmail-backend/jmap/extensions/target/surefire-reports \
-            EmailSendQueueCleanupTest \
-            --require EmailSendQueueCleanupTest:shouldReleaseMailAfterSuccessfulEnqueue \
-            --require EmailSendQueueCleanupTest:shouldReleaseMailWhenEnqueueFails \
-            --require EmailSendQueueCleanupTest:shouldReleaseMailWhenEnqueueIsCancelled
+            com.linagora.tmail.james.jmap.method.EmailSendQueueCleanupTest \
+            --require com.linagora.tmail.james.jmap.method.EmailSendQueueCleanupTest:shouldReleaseMailAfterSuccessfulEnqueue \
+            --require com.linagora.tmail.james.jmap.method.EmailSendQueueCleanupTest:shouldReleaseMailWhenEnqueueFails \
+            --require com.linagora.tmail.james.jmap.method.EmailSendQueueCleanupTest:shouldReleaseMailWhenEnqueueIsCancelled \
+            --require com.linagora.tmail.james.jmap.method.EmailSendQueueCleanupTest:shouldNotReportAnAcceptedMailAsFailedWhenCleanupThrows \
+            --require com.linagora.tmail.james.jmap.method.EmailSendQueueCleanupTest:shouldKeepTheEnqueueFailureWhenCleanupAlsoThrows
       - name: Preserve real Maven test evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
