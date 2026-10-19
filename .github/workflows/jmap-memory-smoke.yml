@@ -50,7 +50,7 @@ jobs:
         run: |
           set -euo pipefail
           mvn -B -ntp \
-            -pl :memory-jmap-integration-tests -am \
+            -pl :memory-jmap-integration-tests,:jmap-extensions -am \
             -Dtest=MemoryEmailGetMethodTest,MemoryEmailSetMethodTest,MemoryEmailSubmissionSetMethodTest,MemoryMailboxSetMethodTest,MemoryTeamMailboxMemberSetMethodTest,MemoryTicketAuthenticationTest,MemoryUnauthenticatedBlobAccessSetMethodTest,MemoryLinagoraEmailSendMethodTest,MemoryUploadFromUrlTest,EmailSendQueueCleanupTest \
             -Dsurefire.failIfNoSpecifiedTests=false \
             test
