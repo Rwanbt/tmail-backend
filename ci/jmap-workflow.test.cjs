@@ -3,7 +3,30 @@ const assert = require('node:assert/strict')
 const { readFileSync } = require('node:fs')
 const { join } = require('node:path')
 const workflow = readFileSync(join(__dirname, '..', '.github/workflows/jmap-memory-smoke.yml'), 'utf8')
+const runtimeContracts = readFileSync(join(__dirname, '..', '.github/workflows/backend-runtime-contracts.yml'), 'utf8')
 const modulePom = readFileSync(join(__dirname, '..', 'tmail-backend', 'pom.xml'), 'utf8')
+
+test('backend runtime gates execute and verify SMTP, PostgreSQL and distributed contracts', () => {
+  assert.match(runtimeContracts, /persist-credentials: false/)
+  assert.match(runtimeContracts, /permissions:\s*\n  contents: read/)
+  assert.match(runtimeContracts, /submodules: recursive/)
+  for (const suite of [
+    'MemoryTeamMailboxSmtpTest',
+    'TMailAuthenticateIntegrationTest',
+    'PostgresTeamMailboxSmtpTest',
+    'PostgresLinagoraEmailSendMethodTest',
+    'DistributedTeamMailboxSmtpTest',
+    'DistributedEmailSubmissionSetMethodTest',
+  ]) {
+    assert.match(runtimeContracts, new RegExp(suite), `Missing executable backend contract ${suite}`)
+  }
+  assert.match(runtimeContracts, /mvn -B -ntp -pl "\$MAVEN_MODULES" -am/)
+  assert.match(runtimeContracts, /python3 ci\/verify_jmap_surefire\.py/)
+  assert.match(runtimeContracts, /--require PostgresTeamMailboxSmtpTest:smtpShouldAcceptSubmissionFromATeamMailbox/)
+  assert.match(runtimeContracts, /--require DistributedTeamMailboxSmtpTest:smtpShouldAcceptSubmissionFromATeamMailbox/)
+  assert.match(runtimeContracts, /--require TMailAuthenticateIntegrationTest:secretaryShouldAuthenticateFailedWhenTryToAuthenticateAsMinisterWithWrongPassword/)
+  assert.doesNotMatch(runtimeContracts, /continue-on-error:\s*true|docker push|jib:build/)
+})
 
 test('real JMAP smoke is isolated, nonprivileged and checks pinned James provenance', () => {
   assert.match(workflow, /submodules: recursive/)
