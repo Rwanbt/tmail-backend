@@ -5,13 +5,13 @@ import java.util.stream.Stream
 import jakarta.inject.{Inject, Named}
 import org.apache.commons.configuration2.Configuration
 import org.apache.james.events.EventBus
-import org.apache.james.jmap.{InjectionKeys => JMAPInjectionKeys, JMAPRoute}
 import org.apache.james.jmap.api.change.{EmailChangeRepository, MailboxChangeRepository, TypeStateFactory}
 import org.apache.james.jmap.core.JmapRfc8621Configuration
-import org.apache.james.jmap.http.{Authenticator, UserProvisioning}
 import org.apache.james.jmap.http.rfc8621.InjectionKeys
+import org.apache.james.jmap.http.{Authenticator, UserProvisioning}
 import org.apache.james.jmap.json.PushSerializer
 import org.apache.james.jmap.routes.{JMAPApi, WebSocketRoutes}
+import org.apache.james.jmap.{InjectionKeys => JMAPInjectionKeys, JMAPRoute}
 import org.apache.james.metrics.api.MetricFactory
 import org.apache.james.user.api.DelegationStore
 
