@@ -25,11 +25,11 @@ jobs:
             reports: 'tmail-backend/integration-tests/smtp/memory-smtp-integration-tests/target/surefire-reports'
           - profile: postgres-smtp-jmap
             modules: ':postgres-smtp-integration-tests,:postgres-jmap-integration-tests'
-            suites: 'PostgresTeamMailboxSmtpTest,PostgresLinagoraEmailSendMethodTest'
+            suites: 'PostgresTeamMailboxSmtpTest,PostgresLinagoraEmailSendMethodTest,PostgresWebSocketTransportDisabledTest'
             reports: 'tmail-backend/integration-tests/smtp/postgres-smtp-integration-tests/target/surefire-reports'
           - profile: distributed-smtp-jmap
             modules: ':distributed-smtp-integration-tests,:distributed-jmap-integration-tests'
-            suites: 'DistributedTeamMailboxSmtpTest,DistributedEmailSubmissionSetMethodTest'
+            suites: 'DistributedTeamMailboxSmtpTest,DistributedEmailSubmissionSetMethodTest,DistributedWebSocketTransportDisabledTest'
             reports: 'tmail-backend/integration-tests/smtp/distributed-smtp-integration-tests/target/surefire-reports'
     name: backend-contracts / ${{ matrix.profile }}
     runs-on: ubuntu-latest
@@ -84,8 +84,9 @@ jobs:
                 --require PostgresTeamMailboxSmtpTest:smtpShouldAcceptSubmissionFromATeamMailbox
               python3 ci/verify_jmap_surefire.py \
                 tmail-backend/integration-tests/jmap/postgres-jmap-integration-tests/target/surefire-reports \
-                PostgresLinagoraEmailSendMethodTest \
-                --require PostgresLinagoraEmailSendMethodTest:emailSendShouldSendMailSuccessfully
+                PostgresLinagoraEmailSendMethodTest PostgresWebSocketTransportDisabledTest \
+                --require PostgresLinagoraEmailSendMethodTest:emailSendShouldSendMailSuccessfully \
+                --require PostgresWebSocketTransportDisabledTest:disabledWebSocketKeepsJmapHttpButExposesNoWebSocketIngress
               ;;
             distributed-smtp-jmap)
               python3 ci/verify_jmap_surefire.py "$REPORTS" \
@@ -93,7 +94,8 @@ jobs:
                 --require DistributedTeamMailboxSmtpTest:smtpShouldAcceptSubmissionFromATeamMailbox
               python3 ci/verify_jmap_surefire.py \
                 tmail-backend/integration-tests/jmap/distributed-jmap-integration-tests/target/surefire-reports \
-                DistributedEmailSubmissionSetMethodTest
+                DistributedEmailSubmissionSetMethodTest DistributedWebSocketTransportDisabledTest \
+                --require DistributedWebSocketTransportDisabledTest:disabledWebSocketKeepsJmapHttpButExposesNoWebSocketIngress
               ;;
           esac
       - name: Preserve Apache James test evidence
