@@ -98,7 +98,14 @@ object EmailSendMethod {
       Mono.just(resource),
       (value: A) => Mono.from(operation(value)),
       (value: A) => Mono.fromRunnable(() => cleanup(value))
-        .subscribeOn(Schedulers.boundedElastic()))
+        .subscribeOn(Schedulers.boundedElastic())
+        .onErrorComplete(error => {
+          // An enqueue may already have committed the message to the queue.
+          // Letting a disposal exception turn that success into a JMAP error
+          // makes a client retry an already submitted email.
+          LOGGER.warn("Failed to release an Email/send MIME resource", error)
+          true
+        }))
 }
 
 class EmailSendMethod @Inject()(emailSetSerializer: EmailSetSerializer,
