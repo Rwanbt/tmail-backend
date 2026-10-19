@@ -51,7 +51,7 @@ jobs:
           set -euo pipefail
           mvn -B -ntp \
             -pl :memory-jmap-integration-tests,:jmap-extensions -am \
-            -Dtest=MemoryEmailGetMethodTest,MemoryEmailSetMethodTest,MemoryEmailSubmissionSetMethodTest,MemoryMailboxSetMethodTest,MemoryTeamMailboxMemberSetMethodTest,MemoryTicketAuthenticationTest,MemoryUnauthenticatedBlobAccessSetMethodTest,MemoryLinagoraEmailSendMethodTest,MemoryUploadFromUrlTest,EmailSendQueueCleanupTest \
+            -Dtest=MemoryEmailGetMethodTest,MemoryEmailSetMethodTest,MemoryEmailSubmissionSetMethodTest,MemoryMailboxSetMethodTest,MemoryWebPushDisabledTest,MemoryTeamMailboxMemberSetMethodTest,MemoryTicketAuthenticationTest,MemoryUnauthenticatedBlobAccessSetMethodTest,MemoryLinagoraEmailSendMethodTest,MemoryUploadFromUrlTest,EmailSendQueueCleanupTest \
             -Dsurefire.failIfNoSpecifiedTests=false \
             test
       - name: Confirm JMAP test methods genuinely executed
@@ -63,6 +63,7 @@ jobs:
             MemoryEmailSetMethodTest \
             MemoryEmailSubmissionSetMethodTest \
             MemoryMailboxSetMethodTest \
+            MemoryWebPushDisabledTest \
             MemoryTeamMailboxMemberSetMethodTest \
             MemoryTicketAuthenticationTest \
             MemoryUnauthenticatedBlobAccessSetMethodTest \
@@ -75,6 +76,9 @@ jobs:
             --require MemoryEmailSetMethodTest:createShouldFailWhenAttachmentDoesNotBelongToUser \
             --require MemoryEmailSetMethodTest:createShouldFailWhenInsertRightIsRemovedByANegativeAclEntry \
             --require MemoryMailboxSetMethodTest:webSocketShouldPushNewMessageWhenChangeSubscriptionOfMailbox \
+            --require MemoryWebPushDisabledTest:pushListenerShouldNotBeRegistered \
+            --require MemoryWebPushDisabledTest:pushSubscriptionGetShouldBeRejected \
+            --require MemoryWebPushDisabledTest:pushSubscriptionSetShouldBeRejected \
             --require MemoryLinagoraEmailSendMethodTest:emailSendShouldSendMailSuccessfully \
             --require MemoryLinagoraEmailSendMethodTest:emailSendShouldSupportAttachment \
             --require MemoryLinagoraEmailSendMethodTest:methodShouldRejectOtherAccountIds \
