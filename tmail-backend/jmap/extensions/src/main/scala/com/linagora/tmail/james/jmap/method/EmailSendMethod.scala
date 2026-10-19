@@ -60,6 +60,7 @@ import org.apache.james.utils.{InitializationOperation, InitilizationOperationBu
 import org.apache.mailet.{Attribute, AttributeValue, Mail}
 import org.reactivestreams.Publisher
 import play.api.libs.json.{JsError, JsObject, JsSuccess}
+import reactor.core.publisher.Mono
 import reactor.core.scala.publisher.{SFlux, SMono}
 import reactor.core.scheduler.Schedulers
 import reactor.util.concurrent.Queues
@@ -84,6 +85,20 @@ class EmailSendMethodModule extends AbstractModule {
         override def init(): Unit = instance.init
       })
   }
+}
+
+object EmailSendMethod {
+  // Reactor owns cleanup on completion, error AND cancellation. Keep it
+  // asynchronous, as a MIME-backed resource may perform blocking I/O.
+  private[method] def withResourceCleanup[A, B](
+      resource: A,
+      operation: A => Publisher[B],
+      cleanup: A => Unit): Mono[B] =
+    Mono.usingWhen(
+      Mono.just(resource),
+      (value: A) => Mono.from(operation(value)),
+      (value: A) => Mono.fromRunnable(() => cleanup(value))
+        .subscribeOn(Schedulers.boundedElastic()))
 }
 
 class EmailSendMethod @Inject()(emailSetSerializer: EmailSetSerializer,
@@ -225,9 +240,12 @@ class EmailSendMethod @Inject()(emailSetSerializer: EmailSetSerializer,
         mailImpl.setMessageNoCopy(message)
         mailImpl
       })
-      _ <- SMono(queue.enqueueReactive(mail))
-        .`then`(SMono.fromCallable(() => LifecycleUtil.dispose(mail))
-          .subscribeOn(Schedulers.boundedElastic()))
+      // The queue may fail or the subscriber may cancel. In both cases the
+      // original success-only cleanup leaked the MIME-backed MailImpl.
+      _ <- SMono.fromPublisher(EmailSendMethod.withResourceCleanup(
+        mail,
+        (pending: MailImpl) => queue.enqueueReactive(pending),
+        (pending: MailImpl) => LifecycleUtil.dispose(pending)))
         .`then`(SMono.just(submissionId))
     } yield {
       EmailSendCreationResponse(

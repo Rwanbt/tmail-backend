@@ -51,7 +51,7 @@ jobs:
           set -euo pipefail
           mvn -B -ntp \
             -pl :memory-jmap-integration-tests -am \
-            -Dtest=MemoryEmailGetMethodTest,MemoryEmailSetMethodTest,MemoryEmailSubmissionSetMethodTest,MemoryMailboxSetMethodTest,MemoryTeamMailboxMemberSetMethodTest,MemoryTicketAuthenticationTest,MemoryUnauthenticatedBlobAccessSetMethodTest,MemoryLinagoraEmailSendMethodTest,MemoryUploadFromUrlTest \
+            -Dtest=MemoryEmailGetMethodTest,MemoryEmailSetMethodTest,MemoryEmailSubmissionSetMethodTest,MemoryMailboxSetMethodTest,MemoryTeamMailboxMemberSetMethodTest,MemoryTicketAuthenticationTest,MemoryUnauthenticatedBlobAccessSetMethodTest,MemoryLinagoraEmailSendMethodTest,MemoryUploadFromUrlTest,EmailSendQueueCleanupTest \
             -Dsurefire.failIfNoSpecifiedTests=false \
             test
       - name: Confirm JMAP test methods genuinely executed
@@ -84,6 +84,14 @@ jobs:
             --require MemoryUploadFromUrlTest:shouldRejectSourceOutsideAllowedSources \
             --require MemoryUploadFromUrlTest:uploadFromUrlShouldRejectUnauthenticatedRequest \
             --require MemoryUploadFromUrlTest:shouldRejectUploadToNonDelegatedAccount
+      - name: Confirm reactive mail cleanup ran on success, failure and cancellation
+        run: |
+          python3 ci/verify_jmap_surefire.py \
+            tmail-backend/jmap/extensions/target/surefire-reports \
+            EmailSendQueueCleanupTest \
+            --require EmailSendQueueCleanupTest:shouldReleaseMailAfterSuccessfulEnqueue \
+            --require EmailSendQueueCleanupTest:shouldReleaseMailWhenEnqueueFails \
+            --require EmailSendQueueCleanupTest:shouldReleaseMailWhenEnqueueIsCancelled
       - name: Preserve real Maven test evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7

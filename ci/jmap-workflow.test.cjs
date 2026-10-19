@@ -19,7 +19,7 @@ test('real JMAP smoke is isolated, nonprivileged and checks pinned James provena
 
 test('a Maven zero-tests success is never presented as JMAP integration PASS', () => {
   assert.match(workflow, /-pl :memory-jmap-integration-tests -am/)
-  assert.match(workflow, /-Dtest=MemoryEmailGetMethodTest,MemoryEmailSetMethodTest,MemoryEmailSubmissionSetMethodTest,MemoryMailboxSetMethodTest,MemoryTeamMailboxMemberSetMethodTest,MemoryTicketAuthenticationTest,MemoryUnauthenticatedBlobAccessSetMethodTest,MemoryLinagoraEmailSendMethodTest,MemoryUploadFromUrlTest/)
+  assert.match(workflow, /-Dtest=MemoryEmailGetMethodTest,MemoryEmailSetMethodTest,MemoryEmailSubmissionSetMethodTest,MemoryMailboxSetMethodTest,MemoryTeamMailboxMemberSetMethodTest,MemoryTicketAuthenticationTest,MemoryUnauthenticatedBlobAccessSetMethodTest,MemoryLinagoraEmailSendMethodTest,MemoryUploadFromUrlTest,EmailSendQueueCleanupTest/)
   assert.match(workflow, /python3 ci\/verify_jmap_surefire\.py/)
   assert.match(workflow, /MemoryUnauthenticatedBlobAccessSetMethodTest/)
   assert.match(workflow, /MemoryTeamMailboxMemberSetMethodTest/)
@@ -33,6 +33,8 @@ test('a Maven zero-tests success is never presented as JMAP integration PASS', (
   assert.match(workflow, /--require MemoryUploadFromUrlTest:shouldRejectSourceOutsideAllowedSources/)
   assert.match(workflow, /--require MemoryUploadFromUrlTest:shouldRejectUploadToNonDelegatedAccount/)
   assert.match(workflow, /--require MemoryUploadFromUrlTest:shouldNeverForwardJmapCredentialsToRemoteFileServer/)
+  assert.match(workflow, /--require EmailSendQueueCleanupTest:shouldReleaseMailWhenEnqueueFails/)
+  assert.match(workflow, /--require EmailSendQueueCleanupTest:shouldReleaseMailWhenEnqueueIsCancelled/)
   assert.match(workflow, /--require MemoryUploadFromUrlTest:shouldNotFollowRemoteRedirectEvenWhenTargetIsOnAllowedHost/)
   assert.match(workflow, /--require MemoryUploadFromUrlTest:shouldReturnInternalServerErrorWhenRemoteReturnsNonSuccess/)
   assert.match(workflow, /if: always\(\)/)
