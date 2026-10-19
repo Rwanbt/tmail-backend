@@ -42,7 +42,7 @@ test('real JMAP smoke is isolated, nonprivileged and checks pinned James provena
 
 test('a Maven zero-tests success is never presented as JMAP integration PASS', () => {
   assert.match(workflow, /-pl :memory-jmap-integration-tests,:jmap-extensions -am/, 'run the extension module tests, not only modules depending on it')
-  assert.match(workflow, /-Dtest=MemoryEmailGetMethodTest,MemoryEmailSetMethodTest,MemoryEmailSubmissionSetMethodTest,MemoryMailboxSetMethodTest,MemoryWebPushDisabledTest,MemoryTeamMailboxMemberSetMethodTest,MemoryTicketAuthenticationTest,MemoryUnauthenticatedBlobAccessSetMethodTest,MemoryLinagoraEmailSendMethodTest,MemoryUploadFromUrlTest,EmailSendQueueCleanupTest/)
+  assert.match(workflow, /-Dtest=MemoryEmailGetMethodTest,MemoryEmailSetMethodTest,MemoryEmailSubmissionSetMethodTest,MemoryMailboxSetMethodTest,MemoryWebPushDisabledTest,MemoryWebSocketTransportDisabledTest,MemoryWebSocketTransportEnabledTest,MemoryTeamMailboxMemberSetMethodTest,MemoryTicketAuthenticationTest,MemoryUnauthenticatedBlobAccessSetMethodTest,MemoryLinagoraEmailSendMethodTest,MemoryUploadFromUrlTest,EmailSendQueueCleanupTest/)
   assert.match(workflow, /python3 ci\/verify_jmap_surefire\.py/)
   assert.match(workflow, /MemoryUnauthenticatedBlobAccessSetMethodTest/)
   assert.match(workflow, /MemoryTeamMailboxMemberSetMethodTest/)
@@ -56,6 +56,10 @@ test('a Maven zero-tests success is never presented as JMAP integration PASS', (
   assert.match(workflow, /--require MemoryWebPushDisabledTest:pushListenerShouldNotBeRegistered/)
   assert.match(workflow, /--require MemoryWebPushDisabledTest:pushSubscriptionGetShouldBeRejected/)
   assert.match(workflow, /--require MemoryWebPushDisabledTest:pushSubscriptionSetShouldBeRejected/)
+  assert.match(workflow, /\sMemoryWebSocketTransportDisabledTest\s*\\/)
+  assert.match(workflow, /\sMemoryWebSocketTransportEnabledTest\s*\\/)
+  assert.match(workflow, /--require MemoryWebSocketTransportDisabledTest:disabledWebSocketDoesNotDisableAuthenticatedJmapHttp/)
+  assert.match(workflow, /--require MemoryWebSocketTransportEnabledTest:enabledWebSocketAcceptsAuthenticatedUpgrade/)
   assert.match(workflow, /--require MemoryLinagoraEmailSendMethodTest:methodShouldRejectOtherAccountIds/)
   assert.match(workflow, /--require MemoryUploadFromUrlTest:shouldRejectSourceOutsideAllowedSources/)
   assert.match(workflow, /--require MemoryUploadFromUrlTest:shouldRejectUploadToNonDelegatedAccount/)

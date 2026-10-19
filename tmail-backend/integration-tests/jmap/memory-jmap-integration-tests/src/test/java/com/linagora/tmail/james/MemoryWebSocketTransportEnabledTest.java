@@ -14,6 +14,8 @@ import org.apache.james.JamesServerBuilder;
 import org.apache.james.JamesServerExtension;
 import org.apache.james.data.DataProbeImpl;
 import org.apache.james.jmap.JmapGuiceProbe;
+import org.apache.james.junit.categories.BasicFeature;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
 
@@ -22,6 +24,7 @@ import com.linagora.tmail.james.app.MemoryServer;
 import com.linagora.tmail.james.jmap.firebase.FirebaseModuleChooserConfiguration;
 import com.linagora.tmail.module.LinagoraTestJMAPServerModule;
 
+@Tag(BasicFeature.TAG)
 public class MemoryWebSocketTransportEnabledTest {
     private static final String USER = "websocket-enabled@example.com";
     private static final String PASSWORD = "secret";
