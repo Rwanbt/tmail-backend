@@ -52,6 +52,12 @@ public interface EmailSendOutboxDataDefinition {
             .column(VERSION)
             .column(CREATED_AT)
             .column(UPDATED_AT)
+            .constraint(DSL.constraint("outbox_state_valid")
+                .check(STATE.in("prepared", "dispatching", "acceptance_unknown", "accepted", "rejected_before_publish")))
+            .constraint(DSL.constraint("outbox_version_valid").check(VERSION.ge(0L)))
+            .constraint(DSL.constraint("outbox_owner_valid")
+                .check(STATE.eq("dispatching").and(OWNER_ID.isNotNull()).and(DSL.length(OWNER_ID).gt(0))
+                    .or(STATE.ne("dispatching").and(OWNER_ID.isNull()))))
             .primaryKey(SUBMISSION_KEY))
         .disableRowLevelSecurity()
         .build();
