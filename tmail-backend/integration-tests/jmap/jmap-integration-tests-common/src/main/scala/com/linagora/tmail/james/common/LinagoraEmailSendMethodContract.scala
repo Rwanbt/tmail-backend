@@ -1145,7 +1145,7 @@ trait LinagoraEmailSendMethodContract {
 
     // Email/send can fail after the message is constructed. Rejected submissions
     // must not have appended an orphan email into the user's chosen mailbox.
-    assertThat(listAllMessageResult(server, bobUsername)).isEmpty()
+    assertThat(listAllMessageResult(server, bobUsername).asJava).isEmpty()
 
   }
 
@@ -1168,7 +1168,7 @@ trait LinagoraEmailSendMethodContract {
 
     assertThat(response).contains("\"notCreated\"", "\"K87\"")
     assertThat(response).doesNotContain("\"created\"")
-    assertThat(listAllMessageResult(server, bobUsername)).isEmpty()
+    assertThat(listAllMessageResult(server, bobUsername).asJava).isEmpty()
   }
 
   @Test
