@@ -226,6 +226,10 @@ class EmailSendMethod @Inject()(emailSetSerializer: EmailSetSerializer,
                   List(success.response.id).asJava,
                   request.emailCreate.mailboxIds.value.asJava,
                   mailboxSession))
+                  // A failed compensating deletion gives no proof that the
+                  // sender copy was removed. Keep the ambiguous outcome,
+                  // rather than replacing it with an arbitrary storage error.
+                  .onErrorResume(_ => SMono.error(uncertain))
                   .flatMap(result =>
                     if (result.getDestroyed.contains(success.response.id)) {
                       SMono.error[EmailSendCreationResponse](EmailSubmissionDefinitivelyRejectedException())
