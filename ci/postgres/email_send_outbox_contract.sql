@@ -43,3 +43,25 @@ BEGIN
     IS DISTINCT FROM repeat('e',64)
  THEN RAISE EXCEPTION 'registration overwrote original payload'; END IF;
 END $$;
+
+-- Durable completion with a competing owner, a stale version and a lost ACK.
+DO $$
+DECLARE result_version BIGINT;
+BEGIN
+ INSERT INTO tmail_email_send_outbox(submission_key,payload_digest)
+ VALUES (repeat('8',64),repeat('9',64));
+ SELECT tmail_claim_email_send(repeat('8',64),0,'node-a') INTO result_version;
+ IF result_version IS DISTINCT FROM 1 THEN RAISE EXCEPTION 'claim missing'; END IF;
+ SELECT tmail_complete_email_send(repeat('8',64),1,'node-b',true) INTO result_version;
+ IF result_version IS NOT NULL THEN RAISE EXCEPTION 'foreign owner accepted mail'; END IF;
+ SELECT tmail_complete_email_send(repeat('8',64),0,'node-a',true) INTO result_version;
+ IF result_version IS NOT NULL THEN RAISE EXCEPTION 'stale version accepted mail'; END IF;
+ SELECT tmail_complete_email_send(repeat('8',64),1,'node-a',false) INTO result_version;
+ IF result_version IS DISTINCT FROM 2 THEN RAISE EXCEPTION 'lost ACK not durable'; END IF;
+ SELECT tmail_complete_email_send(repeat('8',64),2,'node-a',true) INTO result_version;
+ IF result_version IS NOT NULL THEN RAISE EXCEPTION 'uncertain mail overwritten as accepted'; END IF;
+ SELECT tmail_claim_email_send(repeat('8',64),2,'node-b') INTO result_version;
+ IF result_version IS NOT NULL THEN RAISE EXCEPTION 'uncertain mail became dispatchable'; END IF;
+ IF (SELECT state FROM tmail_email_send_outbox WHERE submission_key=repeat('8',64))
+   IS DISTINCT FROM 'acceptance_unknown' THEN RAISE EXCEPTION 'uncertainty lost'; END IF;
+END $$;
