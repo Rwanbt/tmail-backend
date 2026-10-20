@@ -76,3 +76,21 @@ RETURNS BIGINT LANGUAGE SQL AS $$
      AND p_owner IS NOT NULL AND length(p_owner) > 0
   RETURNING version;
 $$;
+
+-- Crash recovery is deliberately fail-closed. An interrupted publisher may
+-- already have succeeded; an automatic retry would risk duplicate delivery.
+-- The expected version and owner prevent an old recovery worker from changing
+-- a row that another operation has already finalized.
+CREATE OR REPLACE FUNCTION tmail_recover_email_send(
+  p_key CHAR(64), p_version BIGINT, p_owner TEXT)
+RETURNS BIGINT LANGUAGE SQL AS $$
+  UPDATE tmail_email_send_outbox
+     SET state = 'acceptance_unknown', owner_id = NULL,
+         version = version + 1, updated_at = now()
+   WHERE submission_key = p_key
+     AND state = 'dispatching'
+     AND version = p_version
+     AND owner_id = p_owner
+     AND p_owner IS NOT NULL AND length(p_owner) > 0
+  RETURNING version;
+$$;
