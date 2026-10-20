@@ -56,3 +56,23 @@ BEGIN
   RETURN 'payload_conflict';
 END;
 $$;
+
+-- Terminalize a claimed dispatch with owner and version checked atomically.
+-- When the queue acknowledgement is missing, persist acceptance_unknown.
+-- Do not permit an expired lease or a competing node to overwrite the state.
+CREATE OR REPLACE FUNCTION tmail_complete_email_send(
+  p_key CHAR(64), p_version BIGINT, p_owner TEXT, p_accepted BOOLEAN)
+RETURNS BIGINT LANGUAGE SQL AS $$
+  UPDATE tmail_email_send_outbox
+     SET state = CASE WHEN p_accepted THEN 'accepted'
+                      ELSE 'acceptance_unknown' END,
+         owner_id = NULL,
+         version = version + 1,
+         updated_at = now()
+   WHERE submission_key = p_key
+     AND version = p_version
+     AND state = 'dispatching'
+     AND owner_id = p_owner
+     AND p_owner IS NOT NULL AND length(p_owner) > 0
+  RETURNING version;
+$$;
