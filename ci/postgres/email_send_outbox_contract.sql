@@ -28,3 +28,18 @@ BEGIN
     IS DISTINCT FROM repeat('b',64)
  THEN RAISE EXCEPTION 'conflicting payload replaced immutable identity'; END IF;
 END $$;
+
+-- Functional registration contract: first insert, identical retry, conflict.
+DO $$
+DECLARE status TEXT;
+BEGIN
+ SELECT tmail_register_email_send(repeat('d',64), repeat('e',64)) INTO status;
+ IF status IS DISTINCT FROM 'registered' THEN RAISE EXCEPTION 'new key not registered'; END IF;
+ SELECT tmail_register_email_send(repeat('d',64), repeat('e',64)) INTO status;
+ IF status IS DISTINCT FROM 'existing' THEN RAISE EXCEPTION 'identical retry not recognized'; END IF;
+ SELECT tmail_register_email_send(repeat('d',64), repeat('f',64)) INTO status;
+ IF status IS DISTINCT FROM 'payload_conflict' THEN RAISE EXCEPTION 'conflicting retry accepted'; END IF;
+ IF (SELECT payload_digest FROM tmail_email_send_outbox WHERE submission_key=repeat('d',64))
+    IS DISTINCT FROM repeat('e',64)
+ THEN RAISE EXCEPTION 'registration overwrote original payload'; END IF;
+END $$;
