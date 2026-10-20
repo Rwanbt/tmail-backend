@@ -11,18 +11,18 @@ DB = ["psql", "-X", "-A", "-t", "-v", "ON_ERROR_STOP=1", "-h", "localhost",
 def query(sql):
     return subprocess.check_output(DB + ["-c", sql], text=True, env=os.environ).strip()
 
-def concurrent(sql, size=12):
+def run_concurrently(sql, size=12):
     with concurrent.futures.ThreadPoolExecutor(max_workers=size) as pool:
         return list(pool.map(query, [sql] * size))
 
 def main():
     key = "1" * 64
     payload = "2" * 64
-    registrations = concurrent(
+    registrations = run_concurrently(
         f"SELECT tmail_register_email_send('{key}','{payload}')")
     assert registrations.count("registered") == 1, registrations
     assert registrations.count("existing") == 11, registrations
-    claims = concurrent(
+    claims = run_concurrently(
         f"SELECT coalesce(tmail_claim_email_send('{key}',0,'node'),-1)")
     assert claims.count("1") == 1, claims
     assert claims.count("-1") == 11, claims
