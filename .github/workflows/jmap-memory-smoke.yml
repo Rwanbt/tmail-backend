@@ -116,7 +116,8 @@ jobs:
             com.linagora.tmail.james.jmap.method.EmailSendPrepublicationFailureTest \
             --require com.linagora.tmail.james.jmap.method.EmailSendPrepublicationFailureTest:synchronousBlobFailureIsProvablyBeforePublication \
             --require com.linagora.tmail.james.jmap.method.EmailSendPrepublicationFailureTest:arbitraryQueueFailureNeverProvesRejection \
-            --require com.linagora.tmail.james.jmap.method.EmailSendPrepublicationFailureTest:failedCompensationNeverMasksTheUncertainSendOutcome
+            --require com.linagora.tmail.james.jmap.method.EmailSendPrepublicationFailureTest:failedCompensationNeverMasksTheUncertainSendOutcome \
+            --require com.linagora.tmail.james.jmap.method.EmailSendPrepublicationFailureTest:emptyCompensationResultNeverSilentlyCompletesAnUncertainSend
       - name: Require JMAP error redaction under a real Maven test
         run: |
           python3 ci/verify_jmap_surefire.py \
