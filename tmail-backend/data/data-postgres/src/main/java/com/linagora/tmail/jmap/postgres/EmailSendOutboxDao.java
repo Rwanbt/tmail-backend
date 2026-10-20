@@ -25,7 +25,6 @@ import static com.linagora.tmail.jmap.postgres.EmailSendOutboxDataDefinition.TAB
 import static com.linagora.tmail.jmap.postgres.EmailSendOutboxDataDefinition.VERSION;
 
 import org.apache.james.backends.postgres.utils.PostgresExecutor;
-import org.jooq.impl.DSL;
 
 import reactor.core.publisher.Mono;
 
@@ -43,6 +42,9 @@ public class EmailSendOutboxDao {
     }
 
     public Mono<Integer> register(String key, String payload) {
+        if (key == null || !key.matches("[0-9a-f]{64}") || payload == null || !payload.matches("[0-9a-f]{64}")) {
+            return Mono.error(new IllegalArgumentException("invalid submission fingerprint"));
+        }
         return executor.executeReturnAffectedRowsCount(dsl -> Mono.from(dsl.insertInto(TABLE_NAME)
             .set(SUBMISSION_KEY, key)
             .set(PAYLOAD_DIGEST, payload)
