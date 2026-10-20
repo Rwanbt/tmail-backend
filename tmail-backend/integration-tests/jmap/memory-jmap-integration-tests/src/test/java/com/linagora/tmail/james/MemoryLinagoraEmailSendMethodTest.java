@@ -23,6 +23,7 @@ import static org.apache.james.data.UsersRepositoryModuleChooser.Implementation.
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.lang.reflect.Proxy;
+import jakarta.mail.MessagingException;
 import java.util.concurrent.ThreadLocalRandom;
 
 import jakarta.inject.Inject;
@@ -83,7 +84,7 @@ public class MemoryLinagoraEmailSendMethodTest implements LinagoraEmailSendMetho
         try {
             String response = given().body(request).when().post()
                 .then().statusCode(200).extract().body().asString();
-            assertThat(response).contains("\"notCreated\"", "\"K87\"");
+            assertThat(response).contains("\"notCreated\"", "\"K87\"", "Email was not queued; the send can be retried");
             int persisted = server.getProbe(MailboxProbeImpl.class)
                 .searchMessage(MultimailboxesSearchQuery.from(SearchQuery.of(SearchQuery.all())).build(),
                     bobUsername().asString(), 100)
@@ -116,6 +117,28 @@ public class MemoryLinagoraEmailSendMethodTest implements LinagoraEmailSendMetho
         }
     }
 
+    @Test
+    public void enqueueFailureWithoutAcceptanceProofMustPreserveSenderCopy(GuiceJamesServer server) {
+        EnqueueFaultProbe fault = server.getProbe(EnqueueFaultProbe.class);
+        String request = LinagoraEmailSendMethodContract$.MODULE$.bobSendsAMailToAndre(server);
+        fault.failWithoutAcceptanceProof();
+        try {
+            String response = given().body(request).when().post()
+                .then().statusCode(200).extract().body().asString();
+            assertThat(response).contains("\"notCreated\"", "\"K87\"",
+                "Queue acceptance is uncertain; retrying may send this email twice");
+            int persisted = server.getProbe(MailboxProbeImpl.class)
+                .searchMessage(MultimailboxesSearchQuery.from(SearchQuery.of(SearchQuery.all())).build(),
+                    bobUsername().asString(), 100)
+                .size();
+            assertThat(persisted)
+                .as("an unclassified failure may follow broker acceptance and must preserve the sender copy")
+                .isEqualTo(1);
+        } finally {
+            fault.restore();
+        }
+    }
+
     public static class EnqueueFaultProbe implements GuiceProbe {
         private final EmailSendMethod emailSendMethod;
         private MailQueue originalQueue;
@@ -134,11 +157,29 @@ public class MemoryLinagoraEmailSendMethodTest implements LinagoraEmailSendMetho
                 MailQueue.class.getClassLoader(), new Class<?>[] { MailQueue.class },
                 (proxy, method, args) -> {
                     if (method.getName().equals("enqueueReactive")) {
-                        return Mono.error(new IllegalStateException("synthetic enqueue rejection before acceptance"));
+                        return Mono.error(new MailQueue.MailQueueException(
+                            "Error while saving blob",
+                            new MessagingException("synthetic MIME blob rejection before publishing")));
                     }
                     return method.invoke(originalQueue, args);
                 });
             emailSendMethod.queue_$eq(failureQueue);
+        }
+
+        public void failWithoutAcceptanceProof() {
+            if (originalQueue != null) {
+                throw new IllegalStateException("fault already installed");
+            }
+            originalQueue = emailSendMethod.queue();
+            MailQueue unknownQueue = (MailQueue) Proxy.newProxyInstance(
+                MailQueue.class.getClassLoader(), new Class<?>[] { MailQueue.class },
+                (proxy, method, args) -> {
+                    if (method.getName().equals("enqueueReactive")) {
+                        return Mono.error(new IllegalStateException("synthetic unknown queue outcome"));
+                    }
+                    return method.invoke(originalQueue, args);
+                });
+            emailSendMethod.queue_$eq(unknownQueue);
         }
 
         public void acceptThenLoseAcknowledgement() {

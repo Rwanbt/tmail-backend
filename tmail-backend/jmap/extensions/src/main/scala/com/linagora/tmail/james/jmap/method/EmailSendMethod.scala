@@ -20,13 +20,14 @@ package com.linagora.tmail.james.jmap.method
 
 import java.time.ZonedDateTime
 import java.util.Date
+import jakarta.mail.MessagingException
 
 import com.google.inject.multibindings.{Multibinder, ProvidesIntoSet}
 import com.google.inject.{AbstractModule, Scopes}
 import com.linagora.tmail.james.jmap.json.EmailSendSerializer
 import com.linagora.tmail.james.jmap.method.CapabilityIdentifier.LINAGORA_PGP
 import com.linagora.tmail.james.jmap.model.EmailSubmissionHelper.resolveEnvelope
-import com.linagora.tmail.james.jmap.model.{EmailSendCreationId, EmailSendCreationRequest, EmailSendCreationRequestInvalidException, EmailSendCreationResponse, EmailSubmissionOutcomeUnknownException, EmailSendRequest, EmailSendResults, EmailSetCreationFailure, EmailSetCreationResult, EmailSetCreationSuccess, EmailSubmissionCreationRequest, MimeMessageSourceImpl}
+import com.linagora.tmail.james.jmap.model.{EmailSendCreationId, EmailSendCreationRequest, EmailSendCreationRequestInvalidException, EmailSendCreationResponse, EmailSubmissionOutcomeUnknownException, EmailSubmissionDefinitivelyRejectedException, EmailSendRequest, EmailSendResults, EmailSetCreationFailure, EmailSetCreationResult, EmailSetCreationSuccess, EmailSubmissionCreationRequest, MimeMessageSourceImpl}
 import eu.timepit.refined.auto._
 import jakarta.annotation.PreDestroy
 import jakarta.inject.Inject
@@ -46,7 +47,7 @@ import org.apache.james.jmap.routes.{BlobResolvers, ProcessingContext, SessionSu
 import org.apache.james.lifecycle.api.{LifecycleUtil, Startable}
 import org.apache.james.mailbox.MessageManager.AppendCommand
 import org.apache.james.mailbox.model.{MailboxId, MessageId}
-import org.apache.james.mailbox.{MailboxManager, MailboxSession}
+import org.apache.james.mailbox.{MailboxManager, MailboxSession, MessageIdManager}
 import org.apache.james.metrics.api.MetricFactory
 import org.apache.james.mime4j.dom.Message
 import org.apache.james.mime4j.message.DefaultMessageWriter
@@ -88,6 +89,16 @@ class EmailSendMethodModule extends AbstractModule {
 }
 
 object EmailSendMethod {
+  // Pinned Apache James RabbitMQ Enqueuer.saveMail throws this exact
+  // MailQueueException synchronously BEFORE publishing a queue reference.
+  // Only this narrow case proves failure before broker acceptance.
+  private[method] def isProvenPrePublicationFailure(error: Throwable): Boolean = error match {
+    case exception: MailQueue.MailQueueException =>
+      exception.getMessage == "Error while saving blob" &&
+        Option(exception.getNextException).exists(_.isInstanceOf[MessagingException])
+    case _ => false
+  }
+
   // Reactor owns cleanup on completion, error AND cancellation. Keep it
   // asynchronous, as a MIME-backed resource may perform blocking I/O.
   private[method] def withResourceCleanup[A, B](
@@ -114,6 +125,7 @@ class EmailSendMethod @Inject()(emailSetSerializer: EmailSetSerializer,
                                 blobResolvers: BlobResolvers,
                                 htmlTextExtractor: HtmlTextExtractor,
                                 mailboxManager: MailboxManager,
+                                messageIdManager: MessageIdManager,
                                 emailSetMethod: EmailSetMethod,
                                 configuration: JMAPConfiguration,
                                 val metricFactory: MetricFactory,
@@ -199,11 +211,30 @@ class EmailSendMethod @Inject()(emailSetSerializer: EmailSetSerializer,
     createEmail(clientId, mailboxSession, request.emailCreate, request.emailSubmissionSet.envelope)
       .flatMap {
         case failure: EmailSetCreationFailure => SMono.error(failure.error)
-        case success: EmailSetCreationSuccess => createEmailSubmission(
-          mailboxSession,
-          success.response,
-          success.originalMessage,
-          request.emailSubmissionSet)
+        case success: EmailSetCreationSuccess =>
+          createEmailSubmission(
+            mailboxSession,
+            success.response,
+            success.originalMessage,
+            request.emailSubmissionSet)
+            .onErrorResume {
+              case uncertain: EmailSubmissionOutcomeUnknownException
+                  if EmailSendMethod.isProvenPrePublicationFailure(uncertain.getCause) =>
+                // An error while storing the MIME blob predates any publish.
+                // Only this failure allows safe, precisely targeted cleanup.
+                SMono.fromPublisher(messageIdManager.deleteReactive(
+                  List(success.response.id).asJava,
+                  request.emailCreate.mailboxIds.value.asJava,
+                  mailboxSession))
+                  .flatMap(result =>
+                    if (result.getDestroyed.contains(success.response.id)) {
+                      SMono.error[EmailSendCreationResponse](EmailSubmissionDefinitivelyRejectedException())
+                    } else {
+                      // No deletion proof: never invite an unsafe retry.
+                      SMono.error[EmailSendCreationResponse](uncertain)
+                    })
+              case unknown => SMono.error[EmailSendCreationResponse](unknown)
+            }
       }
 
   private def parseCreationRequest(jsObject: JsObject): Either[EmailSendCreationRequestInvalidException, EmailSendCreationRequest] =
