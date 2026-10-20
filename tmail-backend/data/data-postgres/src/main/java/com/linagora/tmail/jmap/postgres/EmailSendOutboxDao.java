@@ -84,9 +84,16 @@ public class EmailSendOutboxDao {
             .map(created -> created ? RegistrationDecision.NEW_SUBMISSION : RegistrationDecision.ALREADY_REGISTERED);
     }
 
+    static boolean invalidVersion(long version) {
+        return version < 0 || version == Long.MAX_VALUE;
+    }
+
     public Mono<Integer> claim(String key, long version, String owner) {
         if (owner == null || owner.isBlank()) {
             return Mono.error(new IllegalArgumentException("owner must be nonempty"));
+        }
+        if (invalidVersion(version)) {
+            return Mono.error(new IllegalArgumentException("version must allow monotonic increment"));
         }
         return executor.executeReturnAffectedRowsCount(dsl -> Mono.from(dsl.update(TABLE_NAME)
             .set(STATE, "dispatching")
@@ -98,6 +105,9 @@ public class EmailSendOutboxDao {
     public Mono<Integer> finish(String key, long version, String owner, boolean accepted) {
         if (owner == null || owner.isBlank()) {
             return Mono.error(new IllegalArgumentException("owner must be nonempty"));
+        }
+        if (invalidVersion(version)) {
+            return Mono.error(new IllegalArgumentException("version must allow monotonic increment"));
         }
         return executor.executeReturnAffectedRowsCount(dsl -> Mono.from(dsl.update(TABLE_NAME)
             .set(STATE, accepted ? "accepted" : "acceptance_unknown")
