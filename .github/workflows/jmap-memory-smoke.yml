@@ -86,6 +86,7 @@ jobs:
             --require MemoryWebSocketTransportEnabledTest:enabledWebSocketRejectsUnauthenticatedUpgrade \
             --require MemoryLinagoraEmailSendMethodTest:emailSendShouldSendMailSuccessfully \
             --require MemoryLinagoraEmailSendMethodTest:emailSendShouldSupportAttachment \
+            --require MemoryLinagoraEmailSendMethodTest:emailSendShouldNotCreatedWhenEnvelopAbsentAndEmailSetDoNotHaveHeader \
             --require MemoryLinagoraEmailSendMethodTest:methodShouldRejectOtherAccountIds \
             --require MemoryUploadFromUrlTest:shouldImportRemoteFileAsAUsableJmapAttachment \
             --require MemoryUploadFromUrlTest:shouldNeverForwardJmapCredentialsToRemoteFileServer \

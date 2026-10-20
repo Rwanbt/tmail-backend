@@ -1143,6 +1143,10 @@ trait LinagoraEmailSendMethodContract {
            |    ]
            |}""".stripMargin)
 
+    // Email/send can fail after the message is constructed. Rejected submissions
+    // must not have appended an orphan email into the user's chosen mailbox.
+    assertThat(listAllMessageResult(server, bobUsername)).isEmpty()
+
   }
 
   @Test
