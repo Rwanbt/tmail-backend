@@ -208,6 +208,14 @@ case class EmailSetCreationSuccess(clientId: EmailSendCreationId,
 
 case class EmailSetCreationFailure(clientId: EmailSendCreationId, error: Throwable) extends EmailSetCreationResult
 
+object EmailSubmissionOutcomeUnknownException {
+  val MESSAGE: String = "Queue acceptance is uncertain; retrying may send this email twice"
+}
+
+// Preserve the cause internally. Do not serialize broker error details into JMAP.
+case class EmailSubmissionOutcomeUnknownException(cause: Throwable)
+  extends RuntimeException(EmailSubmissionOutcomeUnknownException.MESSAGE, cause)
+
 
 object EmailSendResults {
   def empty(): EmailSendResults = EmailSendResults(None, None, Map.empty)
@@ -222,6 +230,8 @@ object EmailSendResults {
       case invalidException: EmailSendCreationRequestInvalidException => invalidException.error
       case exceededException: SizeExceededException => SetError.tooLarge(SetErrorDescription(exceededException.getMessage))
       case _: MissingEnvelopeFromException => SetError.serverFail(SetErrorDescription(MissingEnvelopeFromException.MESSAGE))
+      case _: EmailSubmissionOutcomeUnknownException =>
+        SetError.serverFail(SetErrorDescription(EmailSubmissionOutcomeUnknownException.MESSAGE))
       // Backend exceptions can include storage URLs, SMTP diagnostics and credentials.
       // Never serialize their raw messages into the client-visible JMAP response.
       case _: Throwable => SetError.serverFail(SetErrorDescription("Email submission failed"))

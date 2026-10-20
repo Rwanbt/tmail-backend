@@ -23,6 +23,22 @@ class EmailSendFailureSanitizationTest {
   }
 
   @Test
+  def ambiguousQueueAcceptanceWarnsAgainstRetriesWithoutExposingBrokerSecrets(): Unit = {
+    val brokerDetail = "rabbitmq://queue.internal:5672 user=alice password=private-token"
+    val result = EmailSendResults.notCreated(
+      EmailSendCreationId("K87"),
+      EmailSubmissionOutcomeUnknownException(new IllegalStateException(brokerDetail)))
+
+    val response = Json.stringify(EmailSendSerializer.serializeEmailSendResponse(
+      result.asResponse(Fixture.ACCOUNT_ID, UuidState.INSTANCE)))
+
+    assertThat(response)
+      .contains("\"type\":\"serverFail\"")
+      .contains(EmailSubmissionOutcomeUnknownException.MESSAGE)
+      .doesNotContain("private-token", "rabbitmq", "queue.internal")
+  }
+
+  @Test
   def missingSenderStillReturnsTheActionableValidationDescription(): Unit = {
     val result = EmailSendResults.notCreated(EmailSendCreationId("K87"), new MissingEnvelopeFromException)
     val response = Json.stringify(EmailSendSerializer.serializeEmailSendResponse(

@@ -26,7 +26,7 @@ import com.google.inject.{AbstractModule, Scopes}
 import com.linagora.tmail.james.jmap.json.EmailSendSerializer
 import com.linagora.tmail.james.jmap.method.CapabilityIdentifier.LINAGORA_PGP
 import com.linagora.tmail.james.jmap.model.EmailSubmissionHelper.resolveEnvelope
-import com.linagora.tmail.james.jmap.model.{EmailSendCreationId, EmailSendCreationRequest, EmailSendCreationRequestInvalidException, EmailSendCreationResponse, EmailSendRequest, EmailSendResults, EmailSetCreationFailure, EmailSetCreationResult, EmailSetCreationSuccess, EmailSubmissionCreationRequest, MimeMessageSourceImpl}
+import com.linagora.tmail.james.jmap.model.{EmailSendCreationId, EmailSendCreationRequest, EmailSendCreationRequestInvalidException, EmailSendCreationResponse, EmailSubmissionOutcomeUnknownException, EmailSendRequest, EmailSendResults, EmailSetCreationFailure, EmailSetCreationResult, EmailSetCreationSuccess, EmailSubmissionCreationRequest, MimeMessageSourceImpl}
 import eu.timepit.refined.auto._
 import jakarta.annotation.PreDestroy
 import jakarta.inject.Inject
@@ -270,6 +270,10 @@ class EmailSendMethod @Inject()(emailSetSerializer: EmailSetSerializer,
         mail,
         (pending: MailImpl) => queue.enqueueReactive(pending),
         (pending: MailImpl) => LifecycleUtil.dispose(pending)))
+        // The broker can accept the mail and lose its ACK. An enqueue error
+        // therefore does not prove that no delivery occurred. Never delete
+        // the sender copy or encourage an automatic resend in this case.
+        .onErrorResume(error => SMono.error(EmailSubmissionOutcomeUnknownException(error)))
         .`then`(SMono.just(submissionId))
     } yield {
       EmailSendCreationResponse(

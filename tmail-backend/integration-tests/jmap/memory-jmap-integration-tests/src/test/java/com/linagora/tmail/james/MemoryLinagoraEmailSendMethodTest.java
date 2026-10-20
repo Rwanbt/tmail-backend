@@ -102,7 +102,8 @@ public class MemoryLinagoraEmailSendMethodTest implements LinagoraEmailSendMetho
         try {
             String response = given().body(request).when().post()
                 .then().statusCode(200).extract().body().asString();
-            assertThat(response).contains("\"notCreated\"", "\"K87\"");
+            assertThat(response).contains("\"notCreated\"", "\"K87\"", "Queue acceptance is uncertain; retrying may send this email twice")
+                .doesNotContain("synthetic ACK loss after enqueue accepted");
             int persisted = server.getProbe(MailboxProbeImpl.class)
                 .searchMessage(MultimailboxesSearchQuery.from(SearchQuery.of(SearchQuery.all())).build(),
                     bobUsername().asString(), 100)
