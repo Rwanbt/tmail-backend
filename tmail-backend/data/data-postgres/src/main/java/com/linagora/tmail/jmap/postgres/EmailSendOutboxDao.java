@@ -26,6 +26,7 @@ import static com.linagora.tmail.jmap.postgres.EmailSendOutboxDataDefinition.VER
 
 import org.apache.james.backends.postgres.utils.PostgresExecutor;
 
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 /**
@@ -64,9 +65,9 @@ public class EmailSendOutboxDao {
     }
 
     public Mono<String> persistedPayload(String key) {
-        return executor.executeRows(dsl -> Mono.from(dsl.select(PAYLOAD_DIGEST)
+        return executor.executeRows(dsl -> Flux.from(dsl.select(PAYLOAD_DIGEST)
                 .from(TABLE_NAME).where(SUBMISSION_KEY.eq(key))))
-            .map(row -> row.get(PAYLOAD_DIGEST));
+            .next().map(row -> row.get(PAYLOAD_DIGEST));
     }
 
     /**
@@ -119,10 +120,10 @@ public class EmailSendOutboxDao {
         if (owner == null || owner.isBlank()) {
             return Mono.error(new IllegalArgumentException("owner must be nonempty"));
         }
-        return executor.executeRows(dsl -> Mono.from(dsl.select(STATE)
+        return executor.executeRows(dsl -> Flux.from(dsl.select(STATE)
                 .from(TABLE_NAME)
                 .where(SUBMISSION_KEY.eq(key), VERSION.eq(version),
                     OWNER_ID.eq(owner), STATE.eq("dispatching"))))
-            .hasElement();
+            .hasElements();
     }
 }
