@@ -53,6 +53,16 @@ public class EmailSendOutboxDao {
             .onConflict(SUBMISSION_KEY).doNothing()));
     }
 
+    /** Detect replay-with-different-content rather than treating ON CONFLICT as success. */
+    public Mono<Boolean> registerOrMatch(String key, String payload) {
+        return register(key, payload)
+            .flatMap(inserted -> persistedPayload(key)
+                .switchIfEmpty(Mono.error(new IllegalStateException("outbox registration not visible")))
+                .flatMap(stored -> stored.equals(payload)
+                    ? Mono.just(inserted == 1)
+                    : Mono.error(new IllegalArgumentException("submission key reused with different payload"))));
+    }
+
     public Mono<String> persistedPayload(String key) {
         return executor.executeRows(dsl -> Mono.from(dsl.select(PAYLOAD_DIGEST)
                 .from(TABLE_NAME).where(SUBMISSION_KEY.eq(key))))
