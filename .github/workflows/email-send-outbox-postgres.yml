@@ -1,0 +1,41 @@
+name: Email/send PostgreSQL outbox contract
+
+on:
+  pull_request:
+    paths:
+      - 'ci/postgres/email_send_outbox*.sql'
+      - '.github/workflows/email-send-outbox-postgres.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  postgres-outbox:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: outbox_test
+          POSTGRES_PASSWORD: disposable_only
+          POSTGRES_DB: outbox_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U outbox_test -d outbox_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Verify real PostgreSQL persistence and atomic claim
+        env:
+          PGPASSWORD: disposable_only
+        run: |
+          set -euo pipefail
+          psql -X -v ON_ERROR_STOP=1 -h localhost -U outbox_test -d outbox_test \
+            -f ci/postgres/email_send_outbox_contract.sql
