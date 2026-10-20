@@ -69,6 +69,20 @@ public class EmailSendOutboxDao {
             .map(row -> row.get(PAYLOAD_DIGEST));
     }
 
+    /**
+     * A replay must not publish: only a fresh registration can proceed to claim.
+     * Return an explicit decision to make accidental resend by callers harder.
+     */
+    public enum RegistrationDecision {
+        NEW_SUBMISSION,
+        ALREADY_REGISTERED
+    }
+
+    public Mono<RegistrationDecision> registerForDispatch(String key, String payload) {
+        return registerOrMatch(key, payload)
+            .map(created -> created ? RegistrationDecision.NEW_SUBMISSION : RegistrationDecision.ALREADY_REGISTERED);
+    }
+
     public Mono<Integer> claim(String key, long version, String owner) {
         if (owner == null || owner.isBlank()) {
             return Mono.error(new IllegalArgumentException("owner must be nonempty"));
