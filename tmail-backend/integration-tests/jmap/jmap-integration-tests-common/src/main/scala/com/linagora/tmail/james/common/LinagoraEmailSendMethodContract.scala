@@ -1150,6 +1150,28 @@ trait LinagoraEmailSendMethodContract {
   }
 
   @Test
+  def emailSendShouldNotAppendWhenEnvelopeSenderIsUnauthorized(server: GuiceJamesServer): Unit = {
+    val request = bobSendsAMailToAndre(server).replace(
+      "\"email\": \"" + bobUsername.asString + "\"",
+      "\"email\": \"" + andreUsername.asString + "\"")
+
+    val response: String = `given`
+      .body(request)
+    .when()
+      .post()
+    .`then`
+      .statusCode(HttpStatus.SC_OK)
+      .contentType(JSON)
+      .extract()
+      .body()
+      .asString()
+
+    assertThat(response).contains("\"notCreated\"", "\"K87\"")
+    assertThat(response).doesNotContain("\"created\"")
+    assertThat(listAllMessageResult(server, bobUsername)).isEmpty()
+  }
+
+  @Test
   @Tag(CategoryTags.BASIC_FEATURE)
   def emailSendShouldSupportAttachment(server: GuiceJamesServer) : Unit = {
     val payload: Array[Byte] = "123456789\r\n".getBytes(StandardCharsets.UTF_8)
