@@ -46,7 +46,7 @@ import org.apache.james.jmap.routes.{BlobResolvers, ProcessingContext, SessionSu
 import org.apache.james.lifecycle.api.{LifecycleUtil, Startable}
 import org.apache.james.mailbox.MessageManager.AppendCommand
 import org.apache.james.mailbox.model.{MailboxId, MessageId}
-import org.apache.james.mailbox.{MailboxManager, MailboxSession}
+import org.apache.james.mailbox.{MailboxManager, MailboxSession, MessageIdManager}
 import org.apache.james.metrics.api.MetricFactory
 import org.apache.james.mime4j.dom.Message
 import org.apache.james.mime4j.message.DefaultMessageWriter
@@ -114,6 +114,7 @@ class EmailSendMethod @Inject()(emailSetSerializer: EmailSetSerializer,
                                 blobResolvers: BlobResolvers,
                                 htmlTextExtractor: HtmlTextExtractor,
                                 mailboxManager: MailboxManager,
+                                messageIdManager: MessageIdManager,
                                 emailSetMethod: EmailSetMethod,
                                 configuration: JMAPConfiguration,
                                 val metricFactory: MetricFactory,
@@ -204,6 +205,16 @@ class EmailSendMethod @Inject()(emailSetSerializer: EmailSetSerializer,
           success.response,
           success.originalMessage,
           request.emailSubmissionSet)
+          .onErrorResume(error =>
+            // An append already committed. A rejected queue submission must
+            // not retain an unsent orphan that duplicates on client retry.
+            // Keep the original failure if best-effort compensation fails.
+            SMono.fromPublisher(messageIdManager.delete(Set(success.response.id).asJava, mailboxSession))
+              .onErrorResume(_ => {
+                LOGGER.warn("Failed to remove unsent Email/send draft")
+                SMono.empty
+              })
+              .`then`(SMono.error[EmailSendCreationResponse](error)))
       }
 
   private def parseCreationRequest(jsObject: JsObject): Either[EmailSendCreationRequestInvalidException, EmailSendCreationRequest] =
