@@ -1,11 +1,29 @@
+/********************************************************************
+ *  As a subpart of Twake Mail, this file is edited by Linagora.    *
+ *                                                                  *
+ *  https://twake-mail.com/                                         *
+ *  https://linagora.com                                            *
+ *                                                                  *
+ *  This file is subject to The Affero Gnu Public License           *
+ *  version 3.                                                      *
+ *                                                                  *
+ *  https://www.gnu.org/licenses/agpl-3.0.en.html                   *
+ *                                                                  *
+ *  This program is distributed in the hope that it will be         *
+ *  useful, but WITHOUT ANY WARRANTY; without even the implied      *
+ *  warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR         *
+ *  PURPOSE. See the Affero GNU General Public License for more    *
+ *  details.                                                         *
+ ********************************************************************/
 package com.linagora.tmail.jmap.postgres;
+
+import java.time.OffsetDateTime;
 
 import org.apache.james.backends.postgres.PostgresDataDefinition;
 import org.apache.james.backends.postgres.PostgresTable;
-import java.time.OffsetDateTime;
+import org.jooq.Field;
 import org.jooq.Record;
 import org.jooq.Table;
-import org.jooq.Field;
 import org.jooq.impl.DSL;
 import org.jooq.impl.SQLDataType;
 
