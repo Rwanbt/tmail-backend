@@ -27,6 +27,9 @@
 package com.linagora.tmail.modules.data;
 
 import org.apache.james.CoreDataModule;
+import org.apache.james.backends.postgres.PostgresDataDefinition;
+import com.google.inject.multibindings.Multibinder;
+import com.linagora.tmail.jmap.postgres.EmailSendOutboxDataDefinition;
 import org.apache.james.modules.data.PostgresMailRepositoryModule;
 import org.apache.james.modules.data.PostgresRecipientRewriteTableModule;
 
@@ -36,6 +39,8 @@ public class TMailPostgresDataModule extends AbstractModule {
     @Override
     protected void configure() {
         install(new CoreDataModule());
+        Multibinder.newSetBinder(binder(), PostgresDataDefinition.class)
+            .addBinding().toInstance(EmailSendOutboxDataDefinition.MODULE);
         install(new TMailPostgresDomainListModule());
         install(new PostgresRecipientRewriteTableModule());
         install(new PostgresMailRepositoryModule());
