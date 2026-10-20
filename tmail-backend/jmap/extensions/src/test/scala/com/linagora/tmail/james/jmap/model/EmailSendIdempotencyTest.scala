@@ -38,6 +38,14 @@ class EmailSendIdempotencyTest {
   }
 
   @Test
+  def identityAndPayloadHashesAreDomainSeparated(): Unit = {
+    // Even when all input fields are byte-for-byte equal, a submission key
+    // cannot be substituted for a payload fingerprint.
+    val identity = EmailSendIdempotency.identity("same", "same", bytes("same"), bytes("same"))
+    assertThat(identity.keyDigest).isNotEqualTo(identity.payloadDigest)
+  }
+
+  @Test
   def rejectsMissingScopeOrKey(): Unit = {
     assertThatThrownBy(() => EmailSendIdempotency.identity("", "key", bytes("m"), bytes("e")))
       .isInstanceOf(classOf[IllegalArgumentException])
