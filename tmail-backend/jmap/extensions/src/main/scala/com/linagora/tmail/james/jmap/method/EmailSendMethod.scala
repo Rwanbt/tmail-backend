@@ -99,6 +99,12 @@ object EmailSendMethod {
     case _ => false
   }
 
+  private[method] def preserveUncertainOnCleanupFailure[A](
+      cleanup: SMono[A],
+      uncertain: EmailSubmissionOutcomeUnknownException): SMono[A] =
+    cleanup.onErrorResume(_ => SMono.error(uncertain))
+      .switchIfEmpty(SMono.error(uncertain))
+
   // Reactor owns cleanup on completion, error AND cancellation. Keep it
   // asynchronous, as a MIME-backed resource may perform blocking I/O.
   private[method] def withResourceCleanup[A, B](
@@ -222,10 +228,12 @@ class EmailSendMethod @Inject()(emailSetSerializer: EmailSetSerializer,
                   if EmailSendMethod.isProvenPrePublicationFailure(uncertain.getCause) =>
                 // An error while storing the MIME blob predates any publish.
                 // Only this failure allows safe, precisely targeted cleanup.
-                SMono.fromPublisher(messageIdManager.deleteReactive(
-                  List(success.response.id).asJava,
-                  request.emailCreate.mailboxIds.value.asJava,
-                  mailboxSession))
+                EmailSendMethod.preserveUncertainOnCleanupFailure(
+                  SMono.fromPublisher(messageIdManager.deleteReactive(
+                    List(success.response.id).asJava,
+                    request.emailCreate.mailboxIds.value.asJava,
+                    mailboxSession)),
+                  uncertain)
                   .flatMap(result =>
                     if (result.getDestroyed.contains(success.response.id)) {
                       SMono.error[EmailSendCreationResponse](EmailSubmissionDefinitivelyRejectedException())
