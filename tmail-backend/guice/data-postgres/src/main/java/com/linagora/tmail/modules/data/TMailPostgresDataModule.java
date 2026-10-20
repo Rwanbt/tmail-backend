@@ -28,12 +28,12 @@ package com.linagora.tmail.modules.data;
 
 import org.apache.james.CoreDataModule;
 import org.apache.james.backends.postgres.PostgresDataDefinition;
-import com.google.inject.multibindings.Multibinder;
-import com.linagora.tmail.jmap.postgres.EmailSendOutboxDataDefinition;
 import org.apache.james.modules.data.PostgresMailRepositoryModule;
 import org.apache.james.modules.data.PostgresRecipientRewriteTableModule;
 
 import com.google.inject.AbstractModule;
+import com.google.inject.multibindings.Multibinder;
+import com.linagora.tmail.jmap.postgres.EmailSendOutboxDataDefinition;
 
 public class TMailPostgresDataModule extends AbstractModule {
     @Override
