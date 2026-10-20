@@ -27,6 +27,12 @@ import org.apache.james.jmap.mail.{EmailSubmissionAddress, Envelope}
 
 import scala.util.{Failure, Success, Try}
 
+object MissingEnvelopeFromException {
+  val MESSAGE = "Implicit envelope detection requires a from field"
+}
+
+class MissingEnvelopeFromException extends IllegalArgumentException(MissingEnvelopeFromException.MESSAGE)
+
 object EmailSubmissionHelper {
   def resolveEnvelope(mimeMessage: MimeMessage, maybeEnvelope: Option[Envelope]): Try[Envelope] =
     maybeEnvelope.map(Success(_)).getOrElse(extractEnvelope(mimeMessage))
@@ -40,7 +46,7 @@ object EmailSubmissionHelper {
         .headOption
         .map(_.asInstanceOf[InternetAddress].getAddress)
         .map(s => Try(new MailAddress(s)))
-        .getOrElse(Failure(new IllegalArgumentException("Implicit envelope detection requires a from field")))
+        .getOrElse(Failure(new MissingEnvelopeFromException))
         .map(EmailSubmissionAddress(_))
       rcptTo <- (to ++ cc ++ bcc)
         .map(_.asInstanceOf[InternetAddress].getAddress)

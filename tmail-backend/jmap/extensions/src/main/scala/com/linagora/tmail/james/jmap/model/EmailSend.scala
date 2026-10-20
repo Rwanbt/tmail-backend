@@ -208,6 +208,21 @@ case class EmailSetCreationSuccess(clientId: EmailSendCreationId,
 
 case class EmailSetCreationFailure(clientId: EmailSendCreationId, error: Throwable) extends EmailSetCreationResult
 
+object EmailSubmissionOutcomeUnknownException {
+  val MESSAGE: String = "Queue acceptance is uncertain; retrying may send this email twice"
+}
+
+// Preserve the cause internally. Do not serialize broker error details into JMAP.
+case class EmailSubmissionOutcomeUnknownException(cause: Throwable)
+  extends RuntimeException(EmailSubmissionOutcomeUnknownException.MESSAGE, cause)
+
+// Can only be reported after a pre-publication failure and confirmed deletion.
+object EmailSubmissionDefinitivelyRejectedException {
+  val MESSAGE: String = "Email was not queued; the send can be retried"
+}
+case class EmailSubmissionDefinitivelyRejectedException()
+  extends RuntimeException(EmailSubmissionDefinitivelyRejectedException.MESSAGE)
+
 
 object EmailSendResults {
   def empty(): EmailSendResults = EmailSendResults(None, None, Map.empty)
@@ -221,7 +236,14 @@ object EmailSendResults {
     val setError: SetError = throwable match {
       case invalidException: EmailSendCreationRequestInvalidException => invalidException.error
       case exceededException: SizeExceededException => SetError.tooLarge(SetErrorDescription(exceededException.getMessage))
-      case error: Throwable => SetError.serverFail(SetErrorDescription(error.getMessage))
+      case _: MissingEnvelopeFromException => SetError.serverFail(SetErrorDescription(MissingEnvelopeFromException.MESSAGE))
+      case _: EmailSubmissionOutcomeUnknownException =>
+        SetError.serverFail(SetErrorDescription(EmailSubmissionOutcomeUnknownException.MESSAGE))
+      case _: EmailSubmissionDefinitivelyRejectedException =>
+        SetError.serverFail(SetErrorDescription(EmailSubmissionDefinitivelyRejectedException.MESSAGE))
+      // Backend exceptions can include storage URLs, SMTP diagnostics and credentials.
+      // Never serialize their raw messages into the client-visible JMAP response.
+      case _: Throwable => SetError.serverFail(SetErrorDescription("Email submission failed"))
     }
     EmailSendResults(None, Some(Map(emailSendCreationId -> setError)), Map.empty)
   }

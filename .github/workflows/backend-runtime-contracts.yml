@@ -1,0 +1,110 @@
+name: SMTP, PostgreSQL and distributed runtime contracts
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/backend-runtime-contracts.yml'
+      - 'tmail-backend/**'
+      - 'james-project'
+      - 'pom.xml'
+      - 'ci/verify_jmap_surefire.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backend-contracts:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - profile: memory-smtp
+            modules: ':memory-smtp-integration-tests'
+            suites: 'MemoryTeamMailboxSmtpTest,TMailAuthenticateIntegrationTest'
+            reports: 'tmail-backend/integration-tests/smtp/memory-smtp-integration-tests/target/surefire-reports'
+          - profile: postgres-smtp-jmap
+            modules: ':postgres-smtp-integration-tests,:postgres-jmap-integration-tests'
+            suites: 'PostgresTeamMailboxSmtpTest,PostgresLinagoraEmailSendMethodTest,PostgresWebSocketTransportDisabledTest'
+            reports: 'tmail-backend/integration-tests/smtp/postgres-smtp-integration-tests/target/surefire-reports'
+          - profile: distributed-smtp-jmap
+            modules: ':distributed-smtp-integration-tests,:distributed-jmap-integration-tests'
+            suites: 'DistributedTeamMailboxSmtpTest,DistributedEmailSubmissionSetMethodTest,DistributedWebSocketTransportDisabledTest'
+            reports: 'tmail-backend/integration-tests/smtp/distributed-smtp-integration-tests/target/surefire-reports'
+    name: backend-contracts / ${{ matrix.profile }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+          submodules: recursive
+      - uses: actions/setup-java@dded0888837ed1f317902acf8a20df0ad188d165 # v4
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+      - name: Confirm exact Apache James checkout and Docker availability
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C james-project rev-parse HEAD)" = "$(git ls-tree HEAD james-project | awk '{print $3}')"
+          docker info >/dev/null
+          java -version
+          mvn -version
+      - name: Exercise actual SMTP and JMAP backends with Testcontainers
+        shell: bash
+        timeout-minutes: 80
+        env:
+          MAVEN_MODULES: ${{ matrix.modules }}
+          MAVEN_SUITES: ${{ matrix.suites }}
+        run: |
+          set -euo pipefail
+          mvn -B -ntp -pl "$MAVEN_MODULES" -am \
+            "-Dtest=$MAVEN_SUITES" \
+            -Dsurefire.failIfNoSpecifiedTests=false \
+            test
+      - name: Require executed SMTP contract methods
+        shell: bash
+        env:
+          PROFILE: ${{ matrix.profile }}
+          REPORTS: ${{ matrix.reports }}
+        run: |
+          set -euo pipefail
+          case "$PROFILE" in
+            memory-smtp)
+              python3 ci/verify_jmap_surefire.py "$REPORTS" \
+                MemoryTeamMailboxSmtpTest TMailAuthenticateIntegrationTest \
+                --require MemoryTeamMailboxSmtpTest:smtpShouldAcceptSubmissionFromATeamMailbox \
+                --require TMailAuthenticateIntegrationTest:secretaryShouldAuthenticateFailedWhenTryToAuthenticateAsMinisterWithWrongPassword
+              ;;
+            postgres-smtp-jmap)
+              python3 ci/verify_jmap_surefire.py "$REPORTS" \
+                PostgresTeamMailboxSmtpTest \
+                --require PostgresTeamMailboxSmtpTest:smtpShouldAcceptSubmissionFromATeamMailbox
+              python3 ci/verify_jmap_surefire.py \
+                tmail-backend/integration-tests/jmap/postgres-jmap-integration-tests/target/surefire-reports \
+                PostgresLinagoraEmailSendMethodTest PostgresWebSocketTransportDisabledTest \
+                --require PostgresLinagoraEmailSendMethodTest:emailSendShouldSendMailSuccessfully \
+                --require PostgresWebSocketTransportDisabledTest:disabledWebSocketKeepsJmapHttpButExposesNoWebSocketIngress
+              ;;
+            distributed-smtp-jmap)
+              python3 ci/verify_jmap_surefire.py "$REPORTS" \
+                DistributedTeamMailboxSmtpTest \
+                --require DistributedTeamMailboxSmtpTest:smtpShouldAcceptSubmissionFromATeamMailbox
+              python3 ci/verify_jmap_surefire.py \
+                tmail-backend/integration-tests/jmap/distributed-jmap-integration-tests/target/surefire-reports \
+                DistributedEmailSubmissionSetMethodTest DistributedWebSocketTransportDisabledTest \
+                --require DistributedWebSocketTransportDisabledTest:disabledWebSocketKeepsJmapHttpButExposesNoWebSocketIngress
+              ;;
+          esac
+      - name: Preserve Apache James test evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: backend-${{ matrix.profile }}-surefire
+          path: |
+            tmail-backend/integration-tests/smtp/*/target/surefire-reports/
+            tmail-backend/integration-tests/jmap/*/target/surefire-reports/
+          if-no-files-found: ignore
+          retention-days: 14

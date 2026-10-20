@@ -1143,6 +1143,32 @@ trait LinagoraEmailSendMethodContract {
            |    ]
            |}""".stripMargin)
 
+    // Email/send can fail after the message is constructed. Rejected submissions
+    // must not have appended an orphan email into the user's chosen mailbox.
+    assertThat(listAllMessageResult(server, bobUsername).asJava).isEmpty()
+
+  }
+
+  @Test
+  def emailSendShouldNotAppendWhenEnvelopeSenderIsUnauthorized(server: GuiceJamesServer): Unit = {
+    val request = bobSendsAMailToAndre(server).replace(
+      "\"email\": \"" + bobUsername.asString + "\"",
+      "\"email\": \"" + andreUsername.asString + "\"")
+
+    val response: String = `given`
+      .body(request)
+    .when()
+      .post()
+    .`then`
+      .statusCode(HttpStatus.SC_OK)
+      .contentType(JSON)
+      .extract()
+      .body()
+      .asString()
+
+    assertThat(response).contains("\"notCreated\"", "\"K87\"")
+    assertThat(response).doesNotContain("\"created\"")
+    assertThat(listAllMessageResult(server, bobUsername).asJava).isEmpty()
   }
 
   @Test
