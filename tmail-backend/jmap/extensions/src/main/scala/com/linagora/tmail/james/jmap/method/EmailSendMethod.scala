@@ -20,7 +20,6 @@ package com.linagora.tmail.james.jmap.method
 
 import java.time.ZonedDateTime
 import java.util.Date
-import jakarta.mail.MessagingException
 
 import com.google.inject.multibindings.{Multibinder, ProvidesIntoSet}
 import com.google.inject.{AbstractModule, Scopes}
@@ -32,6 +31,7 @@ import eu.timepit.refined.auto._
 import jakarta.annotation.PreDestroy
 import jakarta.inject.Inject
 import jakarta.mail.Flags
+import jakarta.mail.MessagingException
 import jakarta.mail.internet.{InternetAddress, MimeMessage}
 import org.apache.james.core.{MailAddress, Username}
 import org.apache.james.jmap.JMAPConfiguration
