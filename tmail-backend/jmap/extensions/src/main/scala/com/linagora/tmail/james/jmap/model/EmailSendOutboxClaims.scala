@@ -1,7 +1,5 @@
 package com.linagora.tmail.james.jmap.model
 
-import java.util.concurrent.ConcurrentHashMap
-
 /**
  * Atomic-claim contract for a future durable outbox adapter.
  *
