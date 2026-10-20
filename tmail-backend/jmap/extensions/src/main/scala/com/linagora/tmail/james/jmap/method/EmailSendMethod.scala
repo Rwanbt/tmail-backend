@@ -92,6 +92,12 @@ object EmailSendMethod {
   // Pinned Apache James RabbitMQ Enqueuer.saveMail throws this exact
   // MailQueueException synchronously BEFORE publishing a queue reference.
   // Only this narrow case proves failure before broker acceptance.
+  // Fail before appending the sender copy when startup has not supplied a queue.
+  // A null queue otherwise fails only after persistence, leaving an orphan.
+  private[method] def requireReadyQueue(queue: MailQueue): SMono[Unit] =
+    if (queue == null) SMono.error(new IllegalStateException("Email/send queue not initialized"))
+    else SMono.just(())
+
   private[method] def isProvenPrePublicationFailure(error: Throwable): Boolean = error match {
     case exception: MailQueue.MailQueueException =>
       exception.getMessage == "Error while saving blob" &&
@@ -214,7 +220,8 @@ class EmailSendMethod @Inject()(emailSetSerializer: EmailSetSerializer,
   private def createEmailAndEmailSubmission(clientId: EmailSendCreationId,
                                             mailboxSession: MailboxSession,
                                             request: EmailSendCreationRequest): SMono[EmailSendCreationResponse] =
-    createEmail(clientId, mailboxSession, request.emailCreate, request.emailSubmissionSet.envelope)
+    EmailSendMethod.requireReadyQueue(queue)
+      .flatMap(_ => createEmail(clientId, mailboxSession, request.emailCreate, request.emailSubmissionSet.envelope))
       .flatMap {
         case failure: EmailSetCreationFailure => SMono.error(failure.error)
         case success: EmailSetCreationSuccess =>
