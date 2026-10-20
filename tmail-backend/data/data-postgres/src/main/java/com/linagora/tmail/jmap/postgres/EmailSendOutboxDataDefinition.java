@@ -55,7 +55,9 @@ public interface EmailSendOutboxDataDefinition {
             .constraint(DSL.constraint("outbox_state_valid")
                 .check(STATE.in("prepared", "dispatching", "acceptance_unknown", "accepted", "rejected_before_publish")))
             .constraint(DSL.constraint("outbox_digest_format")
-                .check(DSL.condition("{0} ~ '^[0-9a-f]{64}
+                .check(DSL.length(SUBMISSION_KEY).eq(64)
+                    .and(DSL.length(PAYLOAD_DIGEST).eq(64))
+                    .and(DSL.condition("{0} ~ '^[0-9a-f]+
             .constraint(DSL.constraint("outbox_owner_valid")
                 .check(STATE.eq("dispatching").and(OWNER_ID.isNotNull()).and(DSL.length(OWNER_ID).gt(0))
                     .or(STATE.ne("dispatching").and(OWNER_ID.isNull()))))
@@ -65,7 +67,8 @@ public interface EmailSendOutboxDataDefinition {
 
     PostgresDataDefinition MODULE = PostgresDataDefinition.builder().addTable(TABLE).build();
 }
- AND {1} ~ '^[0-9a-f]{64}
+", SUBMISSION_KEY))
+                    .and(DSL.condition("{0} ~ '^[0-9a-f]+
             .constraint(DSL.constraint("outbox_owner_valid")
                 .check(STATE.eq("dispatching").and(OWNER_ID.isNotNull()).and(DSL.length(OWNER_ID).gt(0))
                     .or(STATE.ne("dispatching").and(OWNER_ID.isNull()))))
@@ -75,8 +78,7 @@ public interface EmailSendOutboxDataDefinition {
 
     PostgresDataDefinition MODULE = PostgresDataDefinition.builder().addTable(TABLE).build();
 }
-",
-                    SUBMISSION_KEY, PAYLOAD_DIGEST)))
+", PAYLOAD_DIGEST))))
             .constraint(DSL.constraint("outbox_version_valid").check(VERSION.ge(0L)))
             .constraint(DSL.constraint("outbox_owner_valid")
                 .check(STATE.eq("dispatching").and(OWNER_ID.isNotNull()).and(DSL.length(OWNER_ID).gt(0))
