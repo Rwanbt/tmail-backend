@@ -5,6 +5,9 @@ on:
     paths:
       - 'ci/postgres/email_send_outbox*.sql'
       - 'ci/postgres/test_email_send_outbox_concurrency.py'
+      - 'tmail-backend/data/data-postgres/src/main/resources/com/linagora/tmail/jmap/postgres/email_send_outbox.sql'
+      - 'tmail-backend/data/data-postgres/src/main/java/com/linagora/tmail/jmap/postgres/EmailSendOutboxDataDefinition.java'
+      - 'tmail-backend/guice/data-postgres/src/main/java/com/linagora/tmail/modules/data/TMailPostgresDataModule.java'
       - '.github/workflows/email-send-outbox-postgres.yml'
   workflow_dispatch:
 
