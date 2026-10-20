@@ -51,7 +51,7 @@ jobs:
           set -euo pipefail
           mvn -B -ntp \
             -pl :memory-jmap-integration-tests,:jmap-extensions -am \
-            -Dtest=MemoryEmailGetMethodTest,MemoryEmailSetMethodTest,MemoryEmailSubmissionSetMethodTest,MemoryMailboxSetMethodTest,MemoryWebPushDisabledTest,MemoryWebSocketTransportDisabledTest,MemoryWebSocketTransportEnabledTest,MemoryTeamMailboxMemberSetMethodTest,MemoryTicketAuthenticationTest,MemoryUnauthenticatedBlobAccessSetMethodTest,MemoryLinagoraEmailSendMethodTest,MemoryUploadFromUrlTest,EmailSendQueueCleanupTest,EmailSendFailureSanitizationTest \
+            -Dtest=MemoryEmailGetMethodTest,MemoryEmailSetMethodTest,MemoryEmailSubmissionSetMethodTest,MemoryMailboxSetMethodTest,MemoryWebPushDisabledTest,MemoryWebSocketTransportDisabledTest,MemoryWebSocketTransportEnabledTest,MemoryTeamMailboxMemberSetMethodTest,MemoryTicketAuthenticationTest,MemoryUnauthenticatedBlobAccessSetMethodTest,MemoryLinagoraEmailSendMethodTest,MemoryUploadFromUrlTest,EmailSendQueueCleanupTest,EmailSendFailureSanitizationTest,EmailSendPrepublicationFailureTest \
             -Dsurefire.failIfNoSpecifiedTests=false \
             test
       - name: Confirm JMAP test methods genuinely executed
@@ -89,6 +89,8 @@ jobs:
             --require MemoryLinagoraEmailSendMethodTest:emailSendShouldNotCreatedWhenEnvelopAbsentAndEmailSetDoNotHaveHeader \
             --require MemoryLinagoraEmailSendMethodTest:emailSendShouldNotAppendWhenEnvelopeSenderIsUnauthorized \
             --require MemoryLinagoraEmailSendMethodTest:rejectedQueueSubmissionMustNotKeepAnOrphanEmail \
+            --require MemoryLinagoraEmailSendMethodTest:lostQueueAcknowledgementMustNotDeleteAnAcceptedEmail \
+            --require MemoryLinagoraEmailSendMethodTest:enqueueFailureWithoutAcceptanceProofMustPreserveSenderCopy \
             --require MemoryLinagoraEmailSendMethodTest:methodShouldRejectOtherAccountIds \
             --require MemoryUploadFromUrlTest:shouldImportRemoteFileAsAUsableJmapAttachment \
             --require MemoryUploadFromUrlTest:shouldNeverForwardJmapCredentialsToRemoteFileServer \
@@ -107,13 +109,21 @@ jobs:
             --require com.linagora.tmail.james.jmap.method.EmailSendQueueCleanupTest:shouldReleaseMailWhenEnqueueIsCancelled \
             --require com.linagora.tmail.james.jmap.method.EmailSendQueueCleanupTest:shouldNotReportAnAcceptedMailAsFailedWhenCleanupThrows \
             --require com.linagora.tmail.james.jmap.method.EmailSendQueueCleanupTest:shouldKeepTheEnqueueFailureWhenCleanupAlsoThrows
+      - name: Verify only proven pre-publication failures permit cleanup
+        run: |
+          python3 ci/verify_jmap_surefire.py \
+            tmail-backend/jmap/extensions/target/surefire-reports \
+            com.linagora.tmail.james.jmap.method.EmailSendPrepublicationFailureTest \
+            --require com.linagora.tmail.james.jmap.method.EmailSendPrepublicationFailureTest:synchronousBlobFailureIsProvablyBeforePublication \
+            --require com.linagora.tmail.james.jmap.method.EmailSendPrepublicationFailureTest:arbitraryQueueFailureNeverProvesRejection
       - name: Require JMAP error redaction under a real Maven test
         run: |
           python3 ci/verify_jmap_surefire.py \
             tmail-backend/jmap/extensions/target/surefire-reports \
             com.linagora.tmail.james.jmap.model.EmailSendFailureSanitizationTest \
             --require com.linagora.tmail.james.jmap.model.EmailSendFailureSanitizationTest:internalQueueFailureMustNotExposeCredentialsOrInfrastructureDetails \
-            --require com.linagora.tmail.james.jmap.model.EmailSendFailureSanitizationTest:missingSenderStillReturnsTheActionableValidationDescription
+            --require com.linagora.tmail.james.jmap.model.EmailSendFailureSanitizationTest:missingSenderStillReturnsTheActionableValidationDescription \
+            --require com.linagora.tmail.james.jmap.model.EmailSendFailureSanitizationTest:ambiguousQueueAcceptanceWarnsAgainstRetriesWithoutExposingBrokerSecrets
       - name: Preserve real Maven test evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
