@@ -27,7 +27,24 @@ def main():
     assert claims.count("1") == 1, claims
     assert claims.count("-1") == 11, claims
     assert query(f"SELECT state FROM tmail_email_send_outbox WHERE submission_key='{key}'") == "dispatching"
-    print("PASS: 12 concurrent registrations and 12 competing CAS claims")
+    # Acknowledgement vs lost-ACK racers: only one owner/version transition wins.
+    terminal_key = "3" * 64
+    query(f"SELECT tmail_register_email_send('{terminal_key}','{payload}')")
+    assert query(f"SELECT tmail_claim_email_send('{terminal_key}',0,'node')") == "1"
+    terminal_results = concurrent.futures.ThreadPoolExecutor(max_workers=12)
+    try:
+        tasks = [terminal_results.submit(query,
+                 f"SELECT coalesce(tmail_complete_email_send('{terminal_key}',1,'node',{str(i % 2 == 0).lower()}),-1)")
+                 for i in range(12)]
+        completions = [task.result() for task in tasks]
+    finally:
+        terminal_results.shutdown(wait=True)
+    assert completions.count("2") == 1, completions
+    assert completions.count("-1") == 11, completions
+    terminal_state = query(f"SELECT state FROM tmail_email_send_outbox WHERE submission_key='{terminal_key}'")
+    assert terminal_state in ("accepted", "acceptance_unknown"), terminal_state
+    assert query(f"SELECT coalesce(tmail_claim_email_send('{terminal_key}',2,'another-node'),-1)") == "-1"
+    print("PASS: 12 concurrent registrations, claims, and terminal ACK races")
 
 if __name__ == "__main__":
     try:

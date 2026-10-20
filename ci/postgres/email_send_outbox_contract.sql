@@ -65,3 +65,23 @@ BEGIN
  IF (SELECT state FROM tmail_email_send_outbox WHERE submission_key=repeat('8',64))
    IS DISTINCT FROM 'acceptance_unknown' THEN RAISE EXCEPTION 'uncertainty lost'; END IF;
 END $$;
+
+-- Simulate a process crash after durable claim and before broker ACK.
+DO $$
+DECLARE v BIGINT;
+BEGIN
+ INSERT INTO tmail_email_send_outbox(submission_key,payload_digest)
+ VALUES (repeat('6',64),repeat('7',64));
+ SELECT tmail_claim_email_send(repeat('6',64),0,'crashed-node') INTO v;
+ IF v IS DISTINCT FROM 1 THEN RAISE EXCEPTION 'crash fixture not claimed'; END IF;
+ SELECT tmail_recover_email_send(repeat('6',64),1,'wrong-node') INTO v;
+ IF v IS NOT NULL THEN RAISE EXCEPTION 'foreign node recovered ownership'; END IF;
+ SELECT tmail_recover_email_send(repeat('6',64),0,'crashed-node') INTO v;
+ IF v IS NOT NULL THEN RAISE EXCEPTION 'stale recovery succeeded'; END IF;
+ SELECT tmail_recover_email_send(repeat('6',64),1,'crashed-node') INTO v;
+ IF v IS DISTINCT FROM 2 THEN RAISE EXCEPTION 'crash did not persist uncertainty'; END IF;
+ SELECT tmail_recover_email_send(repeat('6',64),2,'crashed-node') INTO v;
+ IF v IS NOT NULL THEN RAISE EXCEPTION 'crash recovery repeated'; END IF;
+ SELECT tmail_claim_email_send(repeat('6',64),2,'new-node') INTO v;
+ IF v IS NOT NULL THEN RAISE EXCEPTION 'crashed dispatch was retried'; END IF;
+END $$;
