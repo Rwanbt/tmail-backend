@@ -9,6 +9,13 @@ import reactor.core.scala.publisher.SMono
 
 class EmailSendPrepublicationFailureTest {
   @Test
+  def uninitializedQueueIsRejectedBeforeAnyMailboxAppend(): Unit = {
+    assertThatThrownBy(() => EmailSendMethod.requireReadyQueue(null).block())
+      .isInstanceOf(classOf[IllegalStateException])
+      .hasMessage("Email/send queue not initialized")
+  }
+
+  @Test
   def synchronousBlobFailureIsProvablyBeforePublication(): Unit = {
     val failure = new MailQueue.MailQueueException("Error while saving blob",
       new MessagingException("synthetic blob storage failure"))
