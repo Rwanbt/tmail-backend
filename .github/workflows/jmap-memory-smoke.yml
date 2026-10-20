@@ -88,6 +88,7 @@ jobs:
             --require MemoryLinagoraEmailSendMethodTest:emailSendShouldSupportAttachment \
             --require MemoryLinagoraEmailSendMethodTest:emailSendShouldNotCreatedWhenEnvelopAbsentAndEmailSetDoNotHaveHeader \
             --require MemoryLinagoraEmailSendMethodTest:emailSendShouldNotAppendWhenEnvelopeSenderIsUnauthorized \
+            --require MemoryLinagoraEmailSendMethodTest:rejectedQueueSubmissionMustNotKeepAnOrphanEmail \
             --require MemoryLinagoraEmailSendMethodTest:methodShouldRejectOtherAccountIds \
             --require MemoryUploadFromUrlTest:shouldImportRemoteFileAsAUsableJmapAttachment \
             --require MemoryUploadFromUrlTest:shouldNeverForwardJmapCredentialsToRemoteFileServer \
