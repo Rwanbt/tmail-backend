@@ -23,10 +23,10 @@ import static org.apache.james.data.UsersRepositoryModuleChooser.Implementation.
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.lang.reflect.Proxy;
-import jakarta.mail.MessagingException;
 import java.util.concurrent.ThreadLocalRandom;
 
 import jakarta.inject.Inject;
+import jakarta.mail.MessagingException;
 import org.apache.james.GuiceJamesServer;
 import org.apache.james.JamesServerBuilder;
 import org.apache.james.JamesServerExtension;
