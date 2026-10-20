@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - 'ci/postgres/email_send_outbox*.sql'
+      - 'ci/postgres/test_email_send_outbox_concurrency.py'
       - '.github/workflows/email-send-outbox-postgres.yml'
   workflow_dispatch:
 
@@ -39,3 +40,7 @@ jobs:
           set -euo pipefail
           psql -X -v ON_ERROR_STOP=1 -h localhost -U outbox_test -d outbox_test \
             -f ci/postgres/email_send_outbox_contract.sql
+      - name: Verify concurrent claims from independent database clients
+        env:
+          PGPASSWORD: disposable_only
+        run: python3 ci/postgres/test_email_send_outbox_concurrency.py
