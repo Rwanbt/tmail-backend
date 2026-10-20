@@ -103,6 +103,7 @@ object EmailSendMethod {
       cleanup: SMono[A],
       uncertain: EmailSubmissionOutcomeUnknownException): SMono[A] =
     cleanup.onErrorResume(_ => SMono.error(uncertain))
+      .switchIfEmpty(SMono.error(uncertain))
 
   // Reactor owns cleanup on completion, error AND cancellation. Keep it
   // asynchronous, as a MIME-backed resource may perform blocking I/O.
