@@ -94,6 +94,27 @@ public class MemoryLinagoraEmailSendMethodTest implements LinagoraEmailSendMetho
         }
     }
 
+    @Test
+    public void lostQueueAcknowledgementMustNotDeleteAnAcceptedEmail(GuiceJamesServer server) {
+        EnqueueFaultProbe fault = server.getProbe(EnqueueFaultProbe.class);
+        String request = LinagoraEmailSendMethodContract$.MODULE$.bobSendsAMailToAndre(server);
+        fault.acceptThenLoseAcknowledgement();
+        try {
+            String response = given().body(request).when().post()
+                .then().statusCode(200).extract().body().asString();
+            assertThat(response).contains("\"notCreated\"", "\"K87\"");
+            int persisted = server.getProbe(MailboxProbeImpl.class)
+                .searchMessage(MultimailboxesSearchQuery.from(SearchQuery.of(SearchQuery.all())).build(),
+                    bobUsername().asString(), 100)
+                .size();
+            assertThat(persisted)
+                .as("an accepted enqueue with lost ACK must not delete the sender copy")
+                .isEqualTo(1);
+        } finally {
+            fault.restore();
+        }
+    }
+
     public static class EnqueueFaultProbe implements GuiceProbe {
         private final EmailSendMethod emailSendMethod;
         private MailQueue originalQueue;
@@ -117,6 +138,23 @@ public class MemoryLinagoraEmailSendMethodTest implements LinagoraEmailSendMetho
                     return method.invoke(originalQueue, args);
                 });
             emailSendMethod.queue_$eq(failureQueue);
+        }
+
+        public void acceptThenLoseAcknowledgement() {
+            if (originalQueue != null) {
+                throw new IllegalStateException("fault already installed");
+            }
+            originalQueue = emailSendMethod.queue();
+            MailQueue ackLossQueue = (MailQueue) Proxy.newProxyInstance(
+                MailQueue.class.getClassLoader(), new Class<?>[] { MailQueue.class },
+                (proxy, method, args) -> {
+                    if (method.getName().equals("enqueueReactive")) {
+                        return Mono.from((org.reactivestreams.Publisher<?>) method.invoke(originalQueue, args))
+                            .then(Mono.error(new IllegalStateException("synthetic ACK loss after enqueue accepted")));
+                    }
+                    return method.invoke(originalQueue, args);
+                });
+            emailSendMethod.queue_$eq(ackLossQueue);
         }
 
         public void restore() {
