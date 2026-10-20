@@ -106,7 +106,23 @@ public class EmailSendOutboxDao {
                 OWNER_ID.eq(owner), STATE.eq("dispatching"))));
     }
 
+    /**
+     * Fail closed after interrupted publication. Only the original owner and
+     * version can record uncertainty; an unknown ACK never authorizes retry.
+     */
     public Mono<Integer> recoverUnknown(String key, long version, String owner) {
         return finish(key, version, owner, false);
+    }
+
+    /** Prevent a concurrent or stale publisher from bypassing the prepared claim. */
+    public Mono<Boolean> mayDispatch(String key, long version, String owner) {
+        if (owner == null || owner.isBlank()) {
+            return Mono.error(new IllegalArgumentException("owner must be nonempty"));
+        }
+        return executor.executeRows(dsl -> Mono.from(dsl.select(STATE)
+                .from(TABLE_NAME)
+                .where(SUBMISSION_KEY.eq(key), VERSION.eq(version),
+                    OWNER_ID.eq(owner), STATE.eq("dispatching"))))
+            .hasElement();
     }
 }
