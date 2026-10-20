@@ -57,28 +57,8 @@ public interface EmailSendOutboxDataDefinition {
             .constraint(DSL.constraint("outbox_digest_format")
                 .check(DSL.length(SUBMISSION_KEY).eq(64)
                     .and(DSL.length(PAYLOAD_DIGEST).eq(64))
-                    .and(DSL.condition("submission_key ~ '^[0-9a-f]+
-            .constraint(DSL.constraint("outbox_owner_valid")
-                .check(STATE.eq("dispatching").and(OWNER_ID.isNotNull()).and(DSL.length(OWNER_ID).gt(0))
-                    .or(STATE.ne("dispatching").and(OWNER_ID.isNull()))))
-            .primaryKey(SUBMISSION_KEY))
-        .disableRowLevelSecurity()
-        .build();
-
-    PostgresDataDefinition MODULE = PostgresDataDefinition.builder().addTable(TABLE).build();
-}
-"))
-                    .and(DSL.condition("payload_digest ~ '^[0-9a-f]+
-            .constraint(DSL.constraint("outbox_owner_valid")
-                .check(STATE.eq("dispatching").and(OWNER_ID.isNotNull()).and(DSL.length(OWNER_ID).gt(0))
-                    .or(STATE.ne("dispatching").and(OWNER_ID.isNull()))))
-            .primaryKey(SUBMISSION_KEY))
-        .disableRowLevelSecurity()
-        .build();
-
-    PostgresDataDefinition MODULE = PostgresDataDefinition.builder().addTable(TABLE).build();
-}
-"))))
+                    .and(DSL.condition("submission_key ~ '^[0-9a-f]+$'"))
+                    .and(DSL.condition("payload_digest ~ '^[0-9a-f]+$'"))))
             .constraint(DSL.constraint("outbox_version_valid").check(VERSION.ge(0L)))
             .constraint(DSL.constraint("outbox_owner_valid")
                 .check(STATE.eq("dispatching").and(OWNER_ID.isNotNull()).and(DSL.length(OWNER_ID).gt(0))
