@@ -35,3 +35,24 @@ RETURNS BIGINT LANGUAGE SQL AS $$
      AND p_owner IS NOT NULL AND length(p_owner) > 0
   RETURNING version;
 $$;
+
+-- Register a submission without ever overwriting the payload of an existing
+-- retry key. A different payload is rejected, not silently treated as a retry.
+CREATE OR REPLACE FUNCTION tmail_register_email_send(
+  p_key CHAR(64), p_payload CHAR(64))
+RETURNS TEXT LANGUAGE plpgsql AS $$
+DECLARE current_payload CHAR(64);
+BEGIN
+  IF p_key !~ '^[0-9a-f]{64}$' OR p_payload !~ '^[0-9a-f]{64}$' THEN
+    RAISE EXCEPTION 'invalid submission fingerprint' USING ERRCODE = '22023';
+  END IF;
+  INSERT INTO tmail_email_send_outbox(submission_key, payload_digest)
+  VALUES (p_key, p_payload)
+  ON CONFLICT (submission_key) DO NOTHING;
+  IF FOUND THEN RETURN 'registered'; END IF;
+  SELECT payload_digest INTO current_payload
+    FROM tmail_email_send_outbox WHERE submission_key = p_key;
+  IF current_payload = p_payload THEN RETURN 'existing'; END IF;
+  RETURN 'payload_conflict';
+END;
+$$;
