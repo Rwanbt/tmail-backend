@@ -2,6 +2,7 @@ package com.linagora.tmail.jmap.postgres;
 
 import org.apache.james.backends.postgres.PostgresDataDefinition;
 import org.apache.james.backends.postgres.PostgresTable;
+import java.time.OffsetDateTime;
 import org.jooq.Record;
 import org.jooq.Table;
 import org.jooq.Field;
@@ -17,9 +18,12 @@ public interface EmailSendOutboxDataDefinition {
     Table<Record> TABLE_NAME = DSL.table("tmail_email_send_outbox");
     Field<String> SUBMISSION_KEY = DSL.field("submission_key", SQLDataType.CHAR(64).nullable(false));
     Field<String> PAYLOAD_DIGEST = DSL.field("payload_digest", SQLDataType.CHAR(64).nullable(false));
-    Field<String> OWNER_ID = DSL.field("owner_id", SQLDataType.CLOB);
+    Field<String> OWNER_ID = DSL.field("owner_id", SQLDataType.VARCHAR);
     Field<String> STATE = DSL.field("state", SQLDataType.VARCHAR(32).nullable(false).defaultValue("prepared"));
     Field<Long> VERSION = DSL.field("version", SQLDataType.BIGINT.nullable(false).defaultValue(0L));
+
+    Field<OffsetDateTime> CREATED_AT = DSL.field("created_at", SQLDataType.TIMESTAMPWITHTIMEZONE.nullable(false).defaultValue(DSL.currentOffsetDateTime()));
+    Field<OffsetDateTime> UPDATED_AT = DSL.field("updated_at", SQLDataType.TIMESTAMPWITHTIMEZONE.nullable(false).defaultValue(DSL.currentOffsetDateTime()));
 
     PostgresTable TABLE = PostgresTable.name(TABLE_NAME.getName())
         .createTableStep((dsl, name) -> dsl.createTableIfNotExists(name)
@@ -28,6 +32,8 @@ public interface EmailSendOutboxDataDefinition {
             .column(OWNER_ID)
             .column(STATE)
             .column(VERSION)
+            .column(CREATED_AT)
+            .column(UPDATED_AT)
             .primaryKey(SUBMISSION_KEY))
         .disableRowLevelSecurity()
         .build();
