@@ -26,6 +26,15 @@ class EmailSendPrepublicationFailureTest {
   }
 
   @Test
+  def emptyCompensationResultNeverSilentlyCompletesAnUncertainSend(): Unit = {
+    val uncertain = EmailSubmissionOutcomeUnknownException(
+      new IllegalStateException("synthetic queue acceptance uncertainty"))
+    assertThatThrownBy(() =>
+      EmailSendMethod.preserveUncertainOnCleanupFailure(SMono.empty[String], uncertain).block())
+      .isSameAs(uncertain)
+  }
+
+  @Test
   def arbitraryQueueFailureNeverProvesRejection(): Unit = {
     assertThat(EmailSendMethod.isProvenPrePublicationFailure(
       new IllegalStateException("synthetic enqueue rejection before acceptance"))).isFalse()
