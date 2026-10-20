@@ -21,4 +21,15 @@ class EmailSendFailureSanitizationTest {
       .contains("Email submission failed")
       .doesNotContain("private-token", "jdbc:postgresql", "db.internal")
   }
+
+  @Test
+  def missingSenderStillReturnsTheActionableValidationDescription(): Unit = {
+    val result = EmailSendResults.notCreated(EmailSendCreationId("K87"), new MissingEnvelopeFromException)
+    val response = Json.stringify(EmailSendSerializer.serializeEmailSendResponse(
+      result.asResponse(Fixture.ACCOUNT_ID, UuidState.INSTANCE)))
+
+    assertThat(response)
+      .contains("\"type\":\"serverFail\"")
+      .contains("\"description\":\"Implicit envelope detection requires a from field\"")
+  }
 }

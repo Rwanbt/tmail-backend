@@ -221,6 +221,7 @@ object EmailSendResults {
     val setError: SetError = throwable match {
       case invalidException: EmailSendCreationRequestInvalidException => invalidException.error
       case exceededException: SizeExceededException => SetError.tooLarge(SetErrorDescription(exceededException.getMessage))
+      case _: MissingEnvelopeFromException => SetError.serverFail(SetErrorDescription(MissingEnvelopeFromException.MESSAGE))
       // Backend exceptions can include storage URLs, SMTP diagnostics and credentials.
       // Never serialize their raw messages into the client-visible JMAP response.
       case _: Throwable => SetError.serverFail(SetErrorDescription("Email submission failed"))
