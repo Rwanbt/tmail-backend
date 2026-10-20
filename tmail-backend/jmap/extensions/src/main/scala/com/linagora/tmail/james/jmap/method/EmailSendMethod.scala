@@ -196,7 +196,7 @@ class EmailSendMethod @Inject()(emailSetSerializer: EmailSetSerializer,
   private def createEmailAndEmailSubmission(clientId: EmailSendCreationId,
                                             mailboxSession: MailboxSession,
                                             request: EmailSendCreationRequest): SMono[EmailSendCreationResponse] =
-    createEmail(clientId, mailboxSession, request.emailCreate)
+    createEmail(clientId, mailboxSession, request.emailCreate, request.emailSubmissionSet.envelope)
       .flatMap {
         case failure: EmailSetCreationFailure => SMono.error(failure.error)
         case success: EmailSetCreationSuccess => createEmailSubmission(
@@ -216,16 +216,33 @@ class EmailSendMethod @Inject()(emailSetSerializer: EmailSetSerializer,
 
   def createEmail(clientId: EmailSendCreationId,
                   mailboxSession: MailboxSession,
-                  request: EmailCreationRequest): SMono[EmailSetCreationResult] = {
+                  request: EmailCreationRequest,
+                  requestedEnvelope: Option[Envelope]): SMono[EmailSetCreationResult] = {
     val mailboxIds: List[MailboxId] = request.mailboxIds.value
     if (mailboxIds.size != 1) {
       SMono.just(EmailSetCreationFailure(clientId, new IllegalArgumentException("mailboxIds need to have size 1")))
     } else {
       request.toMime4JMessage(blobResolvers, htmlTextExtractor, mailboxSession)
-        .flatMap(message => append(clientId, request, message, mailboxSession, mailboxIds))
+        .flatMap(message => validateBeforeAppend(message, mailboxSession, requestedEnvelope)
+          .flatMap(_ => append(clientId, request, message, mailboxSession, mailboxIds)))
         .onErrorResume(e => SMono.just[EmailSetCreationResult](EmailSetCreationFailure(clientId, e)))
     }
   }
+
+  // Reject invalid envelopes and forbidden senders before persisting a message.
+  // Post-append validation remains in place to account for permission changes.
+  private def validateBeforeAppend(message: Message,
+                                   mailboxSession: MailboxSession,
+                                   requestedEnvelope: Option[Envelope]): SMono[Unit] =
+    SMono.fromCallable(() => DefaultMessageWriter.asBytes(message))
+      .flatMap(bytes => SMono.fromTry(toMimeMessage("preflight", bytes)))
+      .flatMap(mime => SMono.fromPublisher(EmailSendMethod.withResourceCleanup(
+        mime,
+        (pending: MimeMessageWrapper) => SMono.fromTry(resolveEnvelope(pending, requestedEnvelope))
+          .flatMap(envelope => validate(mailboxSession)(pending, envelope))
+          .asJava(),
+        (pending: MimeMessageWrapper) => LifecycleUtil.dispose(pending))))
+      .map(_ => ())
 
   def createEmailSubmission(mailboxSession: MailboxSession,
                             emailCreationResponse: EmailCreationResponse,
