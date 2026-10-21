@@ -27,6 +27,9 @@ import java.util.UUID;
 import org.apache.james.JamesServerExtension;
 import org.apache.james.GuiceJamesServer;
 import org.apache.james.mailbox.model.MessageId;
+import org.apache.james.mailbox.model.MultimailboxesSearchQuery;
+import org.apache.james.mailbox.model.SearchQuery;
+import org.apache.james.modules.MailboxProbeImpl;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
 
@@ -66,5 +69,10 @@ public class PostgresLinagoraEmailSendMethodTest implements LinagoraEmailSendMet
             .then().statusCode(200).extract().body().asString();
         assertThat(changedPayload).contains("\"notCreated\"", "\"K87\"");
         assertThat(changedPayload).doesNotContain("submission key reused with different payload");
+        assertThat(server.getProbe(MailboxProbeImpl.class)
+            .searchMessage(MultimailboxesSearchQuery.from(SearchQuery.of(SearchQuery.all())).build(),
+                bobUsername().asString(), 100))
+            .as("replay of a durable client identity must not append a second sender copy")
+            .hasSize(1);
     }
 }

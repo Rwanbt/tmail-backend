@@ -369,7 +369,9 @@ class EmailSendMethod @Inject()(emailSetSerializer: EmailSetSerializer,
                   .onErrorResume(_ => SMono.just(()))
                   .flatMap(_ => SMono.error[Unit](uncertain))
               })
+              .`then`(SMono.just(()))
             _ <- durableOutbox.finish(durableKey.getOrElse(""), owner, accepted = true)
+              .onErrorResume(error => SMono.error[Unit](EmailSubmissionOutcomeUnknownException(error)))
           } yield EmailSendCreationResponse(
             emailSubmissionId = submissionId,
             emailId = emailId,
