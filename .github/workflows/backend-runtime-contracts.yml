@@ -25,7 +25,7 @@ jobs:
             reports: 'tmail-backend/integration-tests/smtp/memory-smtp-integration-tests/target/surefire-reports'
           - profile: postgres-smtp-jmap
             modules: ':postgres-smtp-integration-tests,:postgres-jmap-integration-tests'
-            suites: 'PostgresTeamMailboxSmtpTest,PostgresLinagoraEmailSendMethodTest,PostgresWebSocketTransportDisabledTest'
+            suites: 'PostgresTeamMailboxSmtpTest,PostgresLinagoraEmailSendMethodTest,PostgresWebSocketTransportDisabledTest,EmailSendOutboxDaoTest'
             reports: 'tmail-backend/integration-tests/smtp/postgres-smtp-integration-tests/target/surefire-reports'
           - profile: distributed-smtp-jmap
             modules: ':distributed-smtp-integration-tests,:distributed-jmap-integration-tests'
@@ -79,6 +79,11 @@ jobs:
                 --require TMailAuthenticateIntegrationTest:secretaryShouldAuthenticateFailedWhenTryToAuthenticateAsMinisterWithWrongPassword
               ;;
             postgres-smtp-jmap)
+              python3 ci/verify_jmap_surefire.py \
+                tmail-backend/data/data-postgres/target/surefire-reports \
+                EmailSendOutboxDaoTest \
+                --require EmailSendOutboxDaoTest:ambiguousAcceptanceMustRemainUnsendableAfterRestart \
+                --require EmailSendOutboxDaoTest:registrationShouldBeIdempotentAndRejectDifferentPayloadOnReplay
               python3 ci/verify_jmap_surefire.py "$REPORTS" \
                 PostgresTeamMailboxSmtpTest \
                 --require PostgresTeamMailboxSmtpTest:smtpShouldAcceptSubmissionFromATeamMailbox
@@ -106,5 +111,6 @@ jobs:
           path: |
             tmail-backend/integration-tests/smtp/*/target/surefire-reports/
             tmail-backend/integration-tests/jmap/*/target/surefire-reports/
+            tmail-backend/data/data-postgres/target/surefire-reports/
           if-no-files-found: ignore
           retention-days: 14
