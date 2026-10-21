@@ -11,9 +11,14 @@ import java.util.concurrent.Executors;
 
 import org.apache.james.backends.cassandra.CassandraCluster;
 import org.apache.james.backends.cassandra.CassandraClusterExtension;
+import org.apache.james.backends.cassandra.init.ClusterFactory;
+import org.apache.james.backends.cassandra.init.configuration.KeyspaceConfiguration;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
+
+import com.datastax.oss.driver.api.core.CqlSession;
 
 import scala.jdk.javaapi.CollectionConverters;
 
@@ -26,14 +31,23 @@ class CassandraEmailSendOutboxTest {
 
     private CassandraEmailSendOutbox nodeA;
     private CassandraEmailSendOutbox nodeB;
+    private CqlSession independentConnection;
     private String key;
 
     @BeforeEach
     void setUp(CassandraCluster cluster) {
         key = (UUID.randomUUID().toString() + UUID.randomUUID().toString()).replace("-", "");
-        // Two independent runtime objects sharing the real Cassandra cluster.
+        // Independent driver sessions emulate two separate James nodes against
+        // the same real Cassandra Testcontainers database.
+        independentConnection = ClusterFactory.create(cluster.getClusterConfiguration(),
+            KeyspaceConfiguration.builder().keyspace("testing").replicationFactor(1).disableDurableWrites());
         nodeA = new CassandraEmailSendOutbox(cluster.getConf());
-        nodeB = new CassandraEmailSendOutbox(cluster.getConf());
+        nodeB = new CassandraEmailSendOutbox(independentConnection);
+    }
+
+    @AfterEach
+    void closeIndependentConnection() {
+        independentConnection.close();
     }
 
     @Test
