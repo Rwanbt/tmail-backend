@@ -3,9 +3,9 @@ package com.linagora.tmail.james.jmap.method
 import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
 
-import com.datastax.oss.driver.api.core.{CqlSession, DefaultConsistencyLevel}
 import com.datastax.oss.driver.api.core.`type`.DataTypes
 import com.datastax.oss.driver.api.core.cql.{BoundStatement, Row}
+import com.datastax.oss.driver.api.core.{CqlSession, DefaultConsistencyLevel}
 import com.google.inject.AbstractModule
 import com.google.inject.multibindings.Multibinder
 import jakarta.inject.Inject
