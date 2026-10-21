@@ -72,14 +72,14 @@ class CassandraEmailSendOutboxTest {
         nodeA.finish(key, "node-A", false).asJava().block();
         assertThatThrownBy(() -> nodeB.stageAndClaim(key, "node-B", mail).asJava().block())
             .hasMessageContaining("outbox dispatch claim unavailable");
-        assertThat(nodeB.reserve(key, DIGEST, "{\"hello\":1}").asJava().block()).isFalse();
+        assertThat(nodeB.reserve(key, DIGEST, "{\"hello\":1}").asJava().block()).isEqualTo(false);
         assertThatThrownBy(() -> nodeA.finish(key, "node-A", true).asJava().block())
             .hasMessageContaining("outbox finish CAS lost");
     }
 
     @Test
     void payloadConflictsFailClosedAcrossNodes() {
-        assertThat(nodeA.reserve(key, DIGEST, "{\"hello\":1}").asJava().block()).isTrue();
+        assertThat(nodeA.reserve(key, DIGEST, "{\"hello\":1}").asJava().block()).isEqualTo(true);
         assertThatThrownBy(() -> nodeB.reserve(key, "c".repeat(64), "{\"hello\":2}").asJava().block())
             .hasMessageContaining("submission key reused with different payload");
     }
@@ -93,6 +93,6 @@ class CassandraEmailSendOutboxTest {
         assertThatThrownBy(() -> nodeB.finish(key, "owner-2", true).asJava().block())
             .hasMessageContaining("outbox finish CAS lost");
         nodeA.finish(key, "owner-1", true).asJava().block();
-        assertThat(nodeB.reserve(key, DIGEST, "{\"hello\":1}").asJava().block()).isFalse();
+        assertThat(nodeB.reserve(key, DIGEST, "{\"hello\":1}").asJava().block()).isEqualTo(false);
     }
 }
