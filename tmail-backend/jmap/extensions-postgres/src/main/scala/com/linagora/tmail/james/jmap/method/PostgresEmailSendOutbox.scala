@@ -14,7 +14,15 @@ class PostgresEmailSendOutbox @Inject()(@Named(DEFAULT_INJECT) executor: Postgre
 
   override def reserve(key: String, digest: String, requestJson: String): SMono[Boolean] =
     SMono.fromPublisher(dao.reserve(key, digest, requestJson))
-      .map(_ == EmailSendOutboxDao.RegistrationDecision.NEW_SUBMISSION)
+      .flatMap(decision => if (decision == EmailSendOutboxDao.RegistrationDecision.NEW_SUBMISSION) {
+        SMono.just(true)
+      } else {
+        // A lost client response or process crash must never authorize another
+        // append or publish. After 30 minutes the DB can conservatively record
+        // uncertainty for a fully staged dispatch. For an old prepared row it
+        // permanently fences the version-0 stage CAS without inventing MIME.
+        SMono.fromPublisher(dao.quarantineStaleReservation(key)).map(_ => false)
+      })
 
   override def stageAndClaim(key: String, owner: String, mail: OutboxMail): SMono[OutboxMail] = {
     val recipients = Json.stringify(JsArray(mail.recipients.map(JsString.apply)))

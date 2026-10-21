@@ -35,6 +35,32 @@ Cassandra/RabbitMQ applications are not covered by this change. The database
 contains unencrypted MIME payloads unless storage encryption is configured;
 review access, backups and retention before enabling.
 
+### Conservative crash-window quarantine on replay
+
+If the client retries the same *keyed* request after 30 minutes of outbox
+inactivity, the PostgreSQL server atomically fences the previous request:
+
+- A fully staged `dispatching` row becomes `acceptance_unknown`, loses its
+  owner and increments its CAS version. Any late completion by the old owner
+  fails the CAS.
+- A `prepared` row with version 0 remains `prepared` but advances to version 1.
+  This prevents the original process from later invoking the version-0
+  `stageAndClaim`, even if it has appended a sender copy. Preserving the
+  `prepared` state avoids inventing missing MIME and keeps the existing
+  complete-MIME database constraint valid.
+
+This uses the **database** clock; a fresh claim refreshes `updated_at`. The
+retry still receives an unknown outcome, never a second append or queue
+publication. Recent claims, already terminal rows and legacy hash-only
+registrations are untouched. Fenced prepared rows cannot be automatically
+recovered or replayed.
+
+This is a fail-closed classification and fencing mechanism, **not successful
+delivery recovery**: broker acceptance and the sender mailbox copy must still
+be reconciled by an operator. A long-running original publisher may finish
+after quarantine, but it cannot convert the quarantined row to `accepted`;
+operators must not interpret the unknown state as guaranteed non-delivery.
+
 CI exercises the script against a populated legacy schema, repeats it, checks
 that historic states survive unchanged, and verifies the new dispatch
 constraint using real PostgreSQL.

@@ -84,7 +84,10 @@ jobs:
                 EmailSendOutboxDaoTest EmailSendOutboxDurablePayloadTest \
                 --require EmailSendOutboxDaoTest:ambiguousAcceptanceMustRemainUnsendableAfterRestart \
                 --require EmailSendOutboxDaoTest:registrationShouldBeIdempotentAndRejectDifferentPayloadOnReplay \
-                --require EmailSendOutboxDurablePayloadTest:mustPersistRequestAndMimeBeforeAllowingOneClaimAndBlockReplayAfterUnknown
+                --require EmailSendOutboxDurablePayloadTest:mustPersistRequestAndMimeBeforeAllowingOneClaimAndBlockReplayAfterUnknown \
+                --require EmailSendOutboxDurablePayloadTest:stalePreparedReplayMustRemainBlockedWithoutInventingMimeOrDispatch \
+                --require EmailSendOutboxDurablePayloadTest:staleDispatchClaimMustRevokeOriginalOwnerWithoutRetryingBrokerPublication \
+                --require EmailSendOutboxDurablePayloadTest:freshAndLegacyHashOnlyReservationsMustNotBeQuarantined
               python3 ci/verify_jmap_surefire.py "$REPORTS" \
                 PostgresTeamMailboxSmtpTest \
                 --require PostgresTeamMailboxSmtpTest:smtpShouldAcceptSubmissionFromATeamMailbox

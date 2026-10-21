@@ -28,9 +28,12 @@ import static com.linagora.tmail.jmap.postgres.EmailSendOutboxDataDefinition.STA
 import static com.linagora.tmail.jmap.postgres.EmailSendOutboxDataDefinition.SUBMISSION_ID;
 import static com.linagora.tmail.jmap.postgres.EmailSendOutboxDataDefinition.SUBMISSION_KEY;
 import static com.linagora.tmail.jmap.postgres.EmailSendOutboxDataDefinition.TABLE_NAME;
+import static com.linagora.tmail.jmap.postgres.EmailSendOutboxDataDefinition.UPDATED_AT;
 import static com.linagora.tmail.jmap.postgres.EmailSendOutboxDataDefinition.VERSION;
 
 import org.apache.james.backends.postgres.utils.PostgresExecutor;
+import org.jooq.impl.DSL;
+import org.jooq.impl.SQLDataType;
 
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -137,8 +140,37 @@ public class EmailSendOutboxDao {
             .set(STATE, "dispatching")
             .set(OWNER_ID, owner)
             .set(VERSION, 1L)
+            .set(UPDATED_AT, DSL.currentOffsetDateTime())
             .where(SUBMISSION_KEY.eq(key), STATE.eq("prepared"), VERSION.eq(0L),
                 REQUEST_PAYLOAD.isNotNull(), MIME_PAYLOAD.isNull())));
+    }
+
+    /**
+     * Fence a stalled reservation after an extended period of inactivity.
+     * Fully staged dispatches become acceptance_unknown. Prepared rows may
+     * lack MIME, so they remain prepared but advance from version 0 to 1:
+     * this permanently disables stageAndClaim's version-0 CAS without
+     * violating the complete-MIME dispatch constraint. No resend is allowed.
+     *
+     * This is only called on a client replay of the same durable identity.
+     * The PostgreSQL server clock, not a potentially skewed application node
+     * clock, determines the age. The atomic update fences stale owners by
+     * advancing the version and revoking the owner before any later replay.
+     */
+    public Mono<Integer> quarantineStaleReservation(String key) {
+        if (key == null || !key.matches("[0-9a-f]{64}")) {
+            return Mono.error(new IllegalArgumentException("invalid durable submission key"));
+        }
+        return executor.executeReturnAffectedRowsCount(dsl -> Mono.from(dsl.update(TABLE_NAME)
+            .set(STATE, DSL.when(STATE.eq("prepared"), "prepared").otherwise("acceptance_unknown"))
+            .set(OWNER_ID, (String) null)
+            .set(VERSION, VERSION.add(1L))
+            .set(UPDATED_AT, DSL.currentOffsetDateTime())
+            .where(SUBMISSION_KEY.eq(key), REQUEST_PAYLOAD.isNotNull(),
+                STATE.eq("dispatching").or(STATE.eq("prepared").and(VERSION.eq(0L))),
+                VERSION.lt(Long.MAX_VALUE),
+                UPDATED_AT.lt(DSL.field("CURRENT_TIMESTAMP - INTERVAL '30 minutes'",
+                    SQLDataType.TIMESTAMPWITHTIMEZONE)))));
     }
 
     public record StoredMail(byte[] mime, String from, String recipientsJson, String authUser, String submissionId) { }
@@ -187,6 +219,7 @@ public class EmailSendOutboxDao {
             .set(STATE, accepted ? "accepted" : "acceptance_unknown")
             .set(OWNER_ID, (String) null)
             .set(VERSION, version + 1)
+            .set(UPDATED_AT, DSL.currentOffsetDateTime())
             .where(SUBMISSION_KEY.eq(key), VERSION.eq(version),
                 OWNER_ID.eq(owner), STATE.eq("dispatching"))));
     }
