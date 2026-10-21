@@ -18,9 +18,9 @@
 
 package com.linagora.tmail.james.jmap.method
 
-import java.time.ZonedDateTime
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
+import java.time.ZonedDateTime
 import java.util.Date
 import java.util.UUID
 

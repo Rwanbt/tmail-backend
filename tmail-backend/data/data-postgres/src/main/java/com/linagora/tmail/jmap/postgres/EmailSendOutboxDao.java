@@ -138,7 +138,7 @@ public class EmailSendOutboxDao {
             .set(OWNER_ID, owner)
             .set(VERSION, 1L)
             .where(SUBMISSION_KEY.eq(key), STATE.eq("prepared"), VERSION.eq(0L),
-                REQUEST_PAYLOAD.isNotNull(), MIME_PAYLOAD.isNull()))));
+                REQUEST_PAYLOAD.isNotNull(), MIME_PAYLOAD.isNull())));
     }
 
     public record StoredMail(byte[] mime, String from, String recipientsJson, String authUser, String submissionId) { }
@@ -173,7 +173,7 @@ public class EmailSendOutboxDao {
             // A new durable reservation cannot use this legacy hash-only
             // transition: it must persist MIME and envelope via stageAndClaim.
             .where(SUBMISSION_KEY.eq(key), VERSION.eq(version),
-                STATE.eq("prepared"), REQUEST_PAYLOAD.isNull()))));
+                STATE.eq("prepared"), REQUEST_PAYLOAD.isNull())));
     }
 
     public Mono<Integer> finish(String key, long version, String owner, boolean accepted) {
