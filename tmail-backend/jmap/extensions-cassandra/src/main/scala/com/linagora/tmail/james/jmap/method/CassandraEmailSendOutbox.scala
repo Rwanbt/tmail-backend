@@ -2,6 +2,7 @@ package com.linagora.tmail.james.jmap.method
 
 import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
+import java.time.Duration
 
 import com.datastax.oss.driver.api.core.`type`.DataTypes
 import com.datastax.oss.driver.api.core.cql.{BoundStatement, Row}
@@ -21,6 +22,10 @@ import reactor.core.scala.publisher.SMono
  */
 object CassandraEmailSendOutbox {
   private val table = "tmail_email_send_outbox"
+  // A replay after this much inactivity fences a crashed original owner,
+  // but NEVER grants the replaying caller permission to dispatch again.
+  private val staleClaimAgeMicros = Duration.ofMinutes(30).toMillis * 1000L
+
   // A large MIME should use an external durable blob store in a future design.
   // Reject oversized opted-in requests instead of silently overloading a partition.
   private val maxPayloadBytes = 4 * 1024 * 1024
@@ -52,7 +57,11 @@ class CassandraEmailSendOutbox @Inject()(session: CqlSession) extends EmailSendO
   override val enabled: Boolean = true
 
   private val insert = session.prepare(s"INSERT INTO $table (submission_key, payload_digest, request_payload, state, version) VALUES (?, ?, ?, 'prepared', 0) IF NOT EXISTS")
-  private val readReservation = session.prepare(s"SELECT payload_digest, request_payload FROM $table WHERE submission_key = ?")
+  // Cassandra cell write times let us age the current state without a schema
+  // migration. The state cell is rewritten when a claim is durably staged.
+  private val readReservation = session.prepare(s"SELECT payload_digest, request_payload, state, version, writetime(state) AS state_written_at FROM $table WHERE submission_key = ?")
+  private val quarantinePrepared = session.prepare(s"UPDATE $table SET owner_id = null, state = 'prepared', version = 1 WHERE submission_key = ? IF state = 'prepared' AND version = 0")
+  private val quarantineDispatching = session.prepare(s"UPDATE $table SET owner_id = null, state = 'acceptance_unknown', version = 2 WHERE submission_key = ? IF state = 'dispatching' AND version = 1")
   private val stage = session.prepare(s"UPDATE $table SET mime_payload = ?, mail_from = ?, recipients_json = ?, auth_user = ?, submission_id = ?, owner_id = ?, state = 'dispatching', version = 1 WHERE submission_key = ? IF state = 'prepared' AND version = 0")
   private val readClaim = session.prepare(s"SELECT mime_payload, mail_from, recipients_json, auth_user, submission_id, owner_id, state, version FROM $table WHERE submission_key = ?")
   private val complete = session.prepare(s"UPDATE $table SET state = ?, owner_id = null, version = 2 WHERE submission_key = ? IF state = 'dispatching' AND version = 1 AND owner_id = ?")
@@ -67,6 +76,32 @@ class CassandraEmailSendOutbox @Inject()(session: CqlSession) extends EmailSendO
     execute(readReservation.bind(key)).flatMap(result =>
       SMono.fromPublisher(Mono.justOrEmpty(result.one())))
 
+  /**
+   * Quarantine only an old, keyed reservation observed during a client replay.
+   * Cassandra LWT serializes the transition against a late original claim or
+   * finish, and preserves every MIME/envelope column. Even on a failed CAS,
+   * a replay is never authorized to publish.
+   *
+   * Clock skew may cause early or late quarantine. An early quarantine can
+   * change a late successful enqueue into an unknown result, but cannot grant
+   * a second enqueue. Operations must still reconcile the broker/mailbox.
+   */
+  private def quarantineStaleReplay(key: String, row: Row): SMono[Unit] = {
+    val timestamp = if (row.isNull("state_written_at")) None
+      else Some(row.getLong("state_written_at"))
+    val stale = timestamp.exists(value => value > 0L
+      && System.currentTimeMillis() * 1000L - value >= staleClaimAgeMicros)
+    val command = (row.getString("state"), row.getLong("version")) match {
+      case ("prepared", 0L) if stale => Some(quarantinePrepared.bind(key))
+      case ("dispatching", 1L) if stale => Some(quarantineDispatching.bind(key))
+      case _ => None
+    }
+    command match {
+      case Some(statement) => execute(statement, conditional = true).map(_ => ())
+      case None => SMono.just(())
+    }
+  }
+
   override def reserve(key: String, digest: String, requestJson: String): SMono[Boolean] = {
     val requestBytes = Option(requestJson).map(_.getBytes(StandardCharsets.UTF_8)).orNull
     if (!validFingerprint(key) || !validFingerprint(digest) || !safeSize(requestBytes)) {
@@ -79,8 +114,10 @@ class CassandraEmailSendOutbox @Inject()(session: CqlSession) extends EmailSendO
             if (row.getString("payload_digest") != digest || row.getString("request_payload") != requestJson) {
               throw new IllegalArgumentException("submission key reused with different payload")
             }
-            result.wasApplied()
-          }))
+            row
+          })
+          .flatMap(row => if (result.wasApplied()) SMono.just(true)
+            else quarantineStaleReplay(key, row).map(_ => false)))
     }
   }
 
