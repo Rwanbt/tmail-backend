@@ -162,6 +162,25 @@ class CassandraEmailSendOutboxTest {
         assertThat(row().getLong("version")).isEqualTo(2L);
     }
 
+    @Test
+    void simultaneousReplaysOfAbandonedDispatchNeverRestorePublishPermission() throws Exception {
+        byte[] mime = "Original immutable MIME".getBytes(StandardCharsets.UTF_8);
+        seedStale("dispatching", 1L, "disconnected-node", mime);
+        try (var pool = Executors.newFixedThreadPool(2)) {
+            var a = CompletableFuture.supplyAsync(
+                () -> nodeA.reserve(key, DIGEST, "{\"hello\":1}").asJava().block(), pool);
+            var b = CompletableFuture.supplyAsync(
+                () -> nodeB.reserve(key, DIGEST, "{\"hello\":1}").asJava().block(), pool);
+            assertThat(List.of(a.get(), b.get())).containsExactly(false, false);
+        }
+        Row quarantined = row();
+        assertThat(quarantined.getString("state")).isEqualTo("acceptance_unknown");
+        assertThat(quarantined.getLong("version")).isEqualTo(2L);
+        assertThat(quarantined.isNull("owner_id")).isTrue();
+        assertThatThrownBy(() -> nodeA.stageAndClaim(key, "node-after-crash", mail("repeat"))
+            .asJava().block()).hasMessageContaining("outbox dispatch claim unavailable");
+    }
+
     private OutboxMail mail(String body) {
         return new OutboxMail(body.getBytes(StandardCharsets.UTF_8), "alice@example.com",
             CollectionConverters.asScala(List.of("bob@example.com")).toSeq(),
