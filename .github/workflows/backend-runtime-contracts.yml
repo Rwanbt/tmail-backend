@@ -79,6 +79,8 @@ jobs:
                 --require TMailAuthenticateIntegrationTest:secretaryShouldAuthenticateFailedWhenTryToAuthenticateAsMinisterWithWrongPassword
               ;;
             postgres-smtp-jmap)
+              # Keep the existing runtime suite unchanged; the explicit
+              # broker-confirm-loss case is independently executed below.
               python3 ci/verify_jmap_surefire.py \
                 tmail-backend/data/data-postgres/target/surefire-reports \
                 EmailSendOutboxDaoTest EmailSendOutboxDurablePayloadTest \
@@ -108,6 +110,19 @@ jobs:
                 --require DistributedWebSocketTransportDisabledTest:disabledWebSocketKeepsJmapHttpButExposesNoWebSocketIngress
               ;;
           esac
+      - name: Prove real RabbitMQ publisher confirm lost after spool acceptance
+        if: matrix.profile == 'postgres-smtp-jmap'
+        timeout-minutes: 45
+        shell: bash
+        run: |
+          set -euo pipefail
+          mvn -B -ntp -pl :postgres-jmap-integration-tests -am \
+            '-Dtest=PostgresRabbitMQConfirmLossIntegrationTest#acceptedSpoolPublishWithLostConfirmKeepsMimeAndNeverRepublishes' \
+            -Dsurefire.failIfNoSpecifiedTests=false test
+          python3 ci/verify_jmap_surefire.py \
+            tmail-backend/integration-tests/jmap/postgres-jmap-integration-tests/target/surefire-reports \
+            PostgresRabbitMQConfirmLossIntegrationTest \
+            --require PostgresRabbitMQConfirmLossIntegrationTest:acceptedSpoolPublishWithLostConfirmKeepsMimeAndNeverRepublishes
       - name: Preserve Apache James test evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
