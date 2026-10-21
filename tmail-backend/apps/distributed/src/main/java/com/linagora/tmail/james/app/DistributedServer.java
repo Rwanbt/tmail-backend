@@ -181,6 +181,7 @@ import com.linagora.tmail.james.jmap.firebase.FirebasePushListenerRegister;
 import com.linagora.tmail.james.jmap.label.CassandraLabelRepositoryModule;
 import com.linagora.tmail.james.jmap.mail.TMailMailboxSortOrderProviderModule;
 import com.linagora.tmail.james.jmap.method.CalendarEventMethodModule;
+import com.linagora.tmail.james.jmap.method.CassandraEmailSendOutboxModule;
 import com.linagora.tmail.james.jmap.method.ContactAutocompleteMethodModule;
 import com.linagora.tmail.james.jmap.method.CustomMethodModule;
 import com.linagora.tmail.james.jmap.method.EmailRecoveryActionMethodModule;
@@ -347,7 +348,7 @@ public class DistributedServer {
         new DownloadAllRoutesModule(),
         new MailboxClearMethodModule(),
         new FolderFilteringActionMethodModule())
-        .with(new CassandraTicketStoreModule(), new TeamMailboxJmapModule());
+        .with(new CassandraTicketStoreModule(), new TeamMailboxJmapModule(), new CassandraEmailSendOutboxModule());
 
     public static final Module PROTOCOLS = Modules.combine(
         new CassandraVacationModule(),

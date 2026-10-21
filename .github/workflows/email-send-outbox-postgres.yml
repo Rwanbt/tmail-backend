@@ -9,6 +9,10 @@ on:
       - 'tmail-backend/data/data-postgres/src/main/java/com/linagora/tmail/jmap/postgres/EmailSendOutboxDataDefinition.java'
       - 'tmail-backend/apps/postgres/src/doc/release-instructions/email-send-outbox-durable-payload.sql'
       - 'ci/postgres/email_send_outbox_upgrade_contract.sql'
+      - 'ci/postgres/email_send_outbox_inspection_fixture.sql'
+      - 'ci/postgres/test_email_send_outbox_inspection.py'
+      - 'tmail-backend/apps/postgres/src/doc/release-instructions/inspect-email-send-outbox.sql'
+      - 'tmail-backend/apps/postgres/src/doc/release-instructions/inspect_email_send_outbox.py'
       - 'tmail-backend/guice/data-postgres/src/main/java/com/linagora/tmail/modules/data/TMailPostgresDataModule.java'
       - '.github/workflows/email-send-outbox-postgres.yml'
   workflow_dispatch:
@@ -55,3 +59,7 @@ jobs:
         run: |
           psql -X -v ON_ERROR_STOP=1 -h localhost -U outbox_test -d outbox_test \
             -f ci/postgres/email_send_outbox_upgrade_contract.sql
+      - name: Verify private read-only reconciliation after client restart
+        env:
+          PGPASSWORD: disposable_only
+        run: python3 ci/postgres/test_email_send_outbox_inspection.py

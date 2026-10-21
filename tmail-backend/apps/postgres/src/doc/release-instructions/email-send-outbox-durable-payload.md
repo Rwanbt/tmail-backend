@@ -64,3 +64,47 @@ operators must not interpret the unknown state as guaranteed non-delivery.
 CI exercises the script against a populated legacy schema, repeats it, checks
 that historic states survive unchanged, and verifies the new dispatch
 constraint using real PostgreSQL.
+
+### Privileged read-only reconciliation export
+
+After a crash or missing broker acknowledgement, an operator can inspect
+the exact **keyed** reservation without changing its state or republishing.
+Run `inspect_email_send_outbox.py` from a host with PostgreSQL's `psql`
+installed, using a dedicated database login with **SELECT** on
+`tmail_email_send_outbox` and **USAGE** on the application schema. No table
+write permissions or JMAP endpoint are required.
+
+Set `PGHOST`, `PGPORT`, `PGDATABASE`, and `PGUSER` to your PostgreSQL
+connection settings and provide credentials through a protected `.pgpass`
+file or the deployment's existing secret manager. Do not put passwords in
+shell arguments or copy the generated JSON to shared CI logs. The input
+is the 64-character *server fingerprint* of the scoped key, not the raw
+`idempotencyKey` sent by the client. The server computes that fingerprint
+as SHA-256 of UTF-8 `authenticated_username + NUL + idempotencyKey`.
+
+```sh
+python3 inspect_email_send_outbox.py \
+  --submission-key '<64 lowercase hex fingerprint>' \
+  --schema public \
+  --output /restricted/incidents/email-send-incident.json
+```
+
+The output file must **not already exist**. The script uses a PostgreSQL
+`REPEATABLE READ, READ ONLY` transaction and creates the snapshot with
+mode 0600 on Unix and refuses to write if the resulting file is group/world
+accessible. **Windows hosts are currently refused**, because POSIX file
+modes do not establish private Windows ACLs. Run from a trusted Linux host
+or secure Linux container instead. It never prints MIME or request data to
+standard output.
+The JSON includes request, original MIME as base64, resolved envelope,
+current state/version/owner and timestamps. Treat it as sensitive mail
+content; restrict access, retention and backups.
+
+For `prepared` with no MIME, check the sender mailbox and the original
+request; the absence of MIME does not prove that no sender copy was appended.
+For `dispatching` and `acceptance_unknown`, compare the submission ID and
+MIME with queue/broker and delivered-mail evidence. Even `accepted` reflects
+the application's recorded enqueue outcome, not verified recipient delivery.
+**Never automatically resend from this export or assert exactly-once.**
+Unkeyed legacy requests have no durable identity and intentionally produce
+no export from this tool.
