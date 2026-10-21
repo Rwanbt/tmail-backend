@@ -127,7 +127,7 @@ object EmailSendCreationRequestInvalidException {
 case class EmailSendCreationRequestInvalidException(error: SetError) extends Exception
 
 object EmailSendCreationRequest {
-  private val assignableProperties: Set[String] = Set("email/create", "emailSubmission/set")
+  private val assignableProperties: Set[String] = Set("email/create", "emailSubmission/set", "idempotencyKey")
 
   def validateProperties(jsObject: JsObject): Either[EmailSendCreationRequestInvalidException, JsObject] =
     jsObject.keys.diff(assignableProperties) match {
@@ -147,14 +147,22 @@ object EmailSendCreationRequestRaw {
 }
 
 case class EmailSendCreationRequest(emailCreate: EmailCreationRequest,
-                                    emailSubmissionSet: EmailSubmissionCreationRequest)
+                                    emailSubmissionSet: EmailSubmissionCreationRequest,
+                                    idempotencyKey: Option[String])
 
 case class EmailSendCreationRequestRaw(emailCreate: JsObject,
-                                       emailSubmissionSet: JsObject) {
+                                       emailSubmissionSet: JsObject,
+                                       idempotencyKey: Option[String]) {
 
   def validate(): Either[EmailSendCreationRequestInvalidException, EmailSendCreationRequestRaw] =
     validateEmailCreate()
       .flatMap(_ => validateEmailSubmissionSet())
+      .flatMap(_ => idempotencyKey match {
+        case Some(key) if !key.matches("[A-Za-z0-9._:-]{8,128}") =>
+          Left(EmailSendCreationRequestInvalidException(SetError.invalidArguments(
+            SetErrorDescription("idempotencyKey must have 8-128 safe ASCII characters"), None)))
+        case _ => scala.Right(this)
+      })
 
   def validateEmailSubmissionSet(): Either[EmailSendCreationRequestInvalidException, EmailSendCreationRequestRaw] =
     emailSubmissionSet.keys.diff(emailSubmissionAssignableProperties) match {
@@ -183,7 +191,7 @@ case class EmailSendCreationRequestRaw(emailCreate: JsObject,
 
     maybeEmailCreationRequest.flatMap(emailCreate =>
       EmailSendSerializer.deserializeEmailCreationRequest(emailSubmissionSet) match {
-        case JsSuccess(value, _) => scala.Right(EmailSendCreationRequest(emailCreate, value))
+        case JsSuccess(value, _) => scala.Right(EmailSendCreationRequest(emailCreate, value, idempotencyKey))
         case JsError(errors) => Left(EmailSendCreationRequestInvalidException.parse(errors))
       })
   }

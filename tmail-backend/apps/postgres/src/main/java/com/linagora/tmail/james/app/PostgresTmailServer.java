@@ -168,6 +168,7 @@ import com.linagora.tmail.james.jmap.method.ContactAutocompleteMethodModule;
 import com.linagora.tmail.james.jmap.method.CustomMethodModule;
 import com.linagora.tmail.james.jmap.method.EmailRecoveryActionMethodModule;
 import com.linagora.tmail.james.jmap.method.EmailSendMethodModule;
+import com.linagora.tmail.james.jmap.method.PostgresEmailSendOutboxModule;
 import com.linagora.tmail.james.jmap.method.FilterGetMethodModule;
 import com.linagora.tmail.james.jmap.method.FilterSetMethodModule;
 import com.linagora.tmail.james.jmap.method.FolderFilteringActionMethodModule;
@@ -426,6 +427,7 @@ public class PostgresTmailServer {
             new PostgresJmapSettingsRepositoryModule(),
             new PostgresPublicAssetRepositoryModule(),
             new PostgresTicketStoreModule(),
+            new PostgresEmailSendOutboxModule(),
             new TasksHeathCheckModule(),
             chooseQueueModules(configuration),
             new TMailIMAPModule(),

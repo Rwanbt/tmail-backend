@@ -19,6 +19,12 @@ package com.linagora.tmail.jmap.postgres;
 
 import static com.linagora.tmail.jmap.postgres.EmailSendOutboxDataDefinition.OWNER_ID;
 import static com.linagora.tmail.jmap.postgres.EmailSendOutboxDataDefinition.PAYLOAD_DIGEST;
+import static com.linagora.tmail.jmap.postgres.EmailSendOutboxDataDefinition.REQUEST_PAYLOAD;
+import static com.linagora.tmail.jmap.postgres.EmailSendOutboxDataDefinition.MIME_PAYLOAD;
+import static com.linagora.tmail.jmap.postgres.EmailSendOutboxDataDefinition.MAIL_FROM;
+import static com.linagora.tmail.jmap.postgres.EmailSendOutboxDataDefinition.RECIPIENTS_JSON;
+import static com.linagora.tmail.jmap.postgres.EmailSendOutboxDataDefinition.AUTH_USER;
+import static com.linagora.tmail.jmap.postgres.EmailSendOutboxDataDefinition.SUBMISSION_ID;
 import static com.linagora.tmail.jmap.postgres.EmailSendOutboxDataDefinition.STATE;
 import static com.linagora.tmail.jmap.postgres.EmailSendOutboxDataDefinition.SUBMISSION_KEY;
 import static com.linagora.tmail.jmap.postgres.EmailSendOutboxDataDefinition.TABLE_NAME;
@@ -82,6 +88,71 @@ public class EmailSendOutboxDao {
     public Mono<RegistrationDecision> registerForDispatch(String key, String payload) {
         return registerOrMatch(key, payload)
             .map(created -> created ? RegistrationDecision.NEW_SUBMISSION : RegistrationDecision.ALREADY_REGISTERED);
+    }
+
+    /**
+     * Reserve a client-supplied stable identity before any mailbox append.
+     * A repeated identity is terminal for automatic dispatch even if the
+     * process died before MIME serialization. Operators must reconcile it.
+     */
+    public Mono<RegistrationDecision> reserve(String key, String digest, String requestJson) {
+        if (key == null || !key.matches("[0-9a-f]{64}")
+                || digest == null || !digest.matches("[0-9a-f]{64}")
+                || requestJson == null || requestJson.isBlank()) {
+            return Mono.error(new IllegalArgumentException("invalid durable submission"));
+        }
+        return executor.executeReturnAffectedRowsCount(dsl -> Mono.from(dsl.insertInto(TABLE_NAME)
+                .set(SUBMISSION_KEY, key)
+                .set(PAYLOAD_DIGEST, digest)
+                .set(REQUEST_PAYLOAD, requestJson)
+                .set(STATE, "prepared")
+                .set(VERSION, 0L)
+                .onConflict(SUBMISSION_KEY).doNothing()))
+            .flatMap(inserted -> executor.executeRows(dsl -> Flux.from(dsl.select(PAYLOAD_DIGEST, REQUEST_PAYLOAD)
+                    .from(TABLE_NAME).where(SUBMISSION_KEY.eq(key))))
+                .next()
+                .switchIfEmpty(Mono.error(new IllegalStateException("outbox reservation not visible")))
+                .map(row -> {
+                    if (!digest.equals(row.get(PAYLOAD_DIGEST)) || !requestJson.equals(row.get(REQUEST_PAYLOAD))) {
+                        throw new IllegalArgumentException("submission key reused with different payload");
+                    }
+                    return inserted == 1 ? RegistrationDecision.NEW_SUBMISSION : RegistrationDecision.ALREADY_REGISTERED;
+                }));
+    }
+
+    /** One atomic durable payload write and claim, strictly before queue publication. */
+    public Mono<Integer> stageAndClaim(String key, String owner, byte[] mime, String from,
+                                       String recipientsJson, String authUser, String submissionId) {
+        if (owner == null || owner.isBlank() || mime == null || mime.length == 0
+                || from == null || from.isBlank() || recipientsJson == null || recipientsJson.isBlank()
+                || authUser == null || authUser.isBlank() || submissionId == null || submissionId.isBlank()) {
+            return Mono.error(new IllegalArgumentException("invalid dispatch payload"));
+        }
+        return executor.executeReturnAffectedRowsCount(dsl -> Mono.from(dsl.update(TABLE_NAME)
+            .set(MIME_PAYLOAD, mime)
+            .set(MAIL_FROM, from)
+            .set(RECIPIENTS_JSON, recipientsJson)
+            .set(AUTH_USER, authUser)
+            .set(SUBMISSION_ID, submissionId)
+            .set(STATE, "dispatching")
+            .set(OWNER_ID, owner)
+            .set(VERSION, 1L)
+            .where(SUBMISSION_KEY.eq(key), STATE.eq("prepared"), VERSION.eq(0L),
+                REQUEST_PAYLOAD.isNotNull(), MIME_PAYLOAD.isNull()))));
+    }
+
+    public record StoredMail(byte[] mime, String from, String recipientsJson, String authUser, String submissionId) { }
+
+    /** Read the actual persisted delivery bytes while the exact claim is held. */
+    public Mono<StoredMail> loadClaimed(String key, String owner) {
+        return executor.executeRows(dsl -> Flux.from(dsl.select(MIME_PAYLOAD, MAIL_FROM,
+                    RECIPIENTS_JSON, AUTH_USER, SUBMISSION_ID)
+                .from(TABLE_NAME)
+                .where(SUBMISSION_KEY.eq(key), STATE.eq("dispatching"),
+                    VERSION.eq(1L), OWNER_ID.eq(owner))))
+            .next()
+            .map(row -> new StoredMail(row.get(MIME_PAYLOAD), row.get(MAIL_FROM),
+                row.get(RECIPIENTS_JSON), row.get(AUTH_USER), row.get(SUBMISSION_ID)));
     }
 
     static boolean invalidVersion(long version) {
