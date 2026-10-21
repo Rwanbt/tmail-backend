@@ -44,10 +44,10 @@ jobs:
         run: |
           python3 ci/verify_jmap_surefire.py \
             tmail-backend/jmap/extensions-cassandra/target/surefire-reports \
-            CassandraEmailSendOutboxTest \
-            --require CassandraEmailSendOutboxTest:onlyOneNodeCanReserveAndDispatchAndReplaysStayBlocked \
-            --require CassandraEmailSendOutboxTest:payloadConflictsFailClosedAcrossNodes \
-            --require CassandraEmailSendOutboxTest:unknownOwnerCannotCompleteAnotherNodesClaim
+            com.linagora.tmail.james.jmap.method.CassandraEmailSendOutboxTest \
+            --require com.linagora.tmail.james.jmap.method.CassandraEmailSendOutboxTest:onlyOneNodeCanReserveAndDispatchAndReplaysStayBlocked \
+            --require com.linagora.tmail.james.jmap.method.CassandraEmailSendOutboxTest:payloadConflictsFailClosedAcrossNodes \
+            --require com.linagora.tmail.james.jmap.method.CassandraEmailSendOutboxTest:unknownOwnerCannotCompleteAnotherNodesClaim
           python3 ci/verify_jmap_surefire.py \
             tmail-backend/integration-tests/jmap/distributed-jmap-integration-tests/target/surefire-reports \
             DistributedLinagoraEmailSendMethodTest \
