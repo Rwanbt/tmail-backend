@@ -1,17 +1,14 @@
 package com.linagora.tmail.james.jmap.method
 
 import com.google.inject.AbstractModule
-import com.google.inject.multibindings.Multibinder
-import com.linagora.tmail.jmap.postgres.{EmailSendOutboxDao, EmailSendOutboxDataDefinition}
+import com.linagora.tmail.jmap.postgres.EmailSendOutboxDao
 import jakarta.inject.Inject
-import org.apache.james.backends.postgres.PostgresDataDefinition
 import org.apache.james.backends.postgres.utils.PostgresExecutor
 import org.apache.james.backends.postgres.utils.PostgresExecutor.DEFAULT_INJECT
 import play.api.libs.json.{JsArray, JsString, Json}
 import reactor.core.scala.publisher.SMono
 
 import jakarta.inject.Named
-import scala.jdk.CollectionConverters._
 
 class PostgresEmailSendOutbox @Inject()(@Named(DEFAULT_INJECT) executor: PostgresExecutor) extends EmailSendOutbox {
   private val dao = new EmailSendOutboxDao(executor)
@@ -46,7 +43,5 @@ class PostgresEmailSendOutbox @Inject()(@Named(DEFAULT_INJECT) executor: Postgre
 class PostgresEmailSendOutboxModule extends AbstractModule {
   override def configure(): Unit = {
     bind(classOf[EmailSendOutbox]).to(classOf[PostgresEmailSendOutbox])
-    Multibinder.newSetBinder(binder(), classOf[PostgresDataDefinition])
-      .addBinding().toInstance(EmailSendOutboxDataDefinition.MODULE)
   }
 }
