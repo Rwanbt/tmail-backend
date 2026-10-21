@@ -26,12 +26,14 @@ import java.util.UUID;
 import org.apache.james.JamesServerBuilder;
 import org.apache.james.JamesServerExtension;
 import org.apache.james.backends.redis.RedisExtension;
+import org.apache.james.junit.categories.BasicFeature;
 import org.apache.james.mailbox.cassandra.ids.CassandraMessageId;
 import org.apache.james.mailbox.model.MessageId;
 import org.apache.james.GuiceJamesServer;
 import org.apache.james.mailbox.model.MultimailboxesSearchQuery;
 import org.apache.james.mailbox.model.SearchQuery;
 import org.apache.james.modules.MailboxProbeImpl;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.apache.james.modules.AwsS3BlobStoreExtension;
 import org.junit.jupiter.api.extension.RegisterExtension;
@@ -87,6 +89,7 @@ public class DistributedLinagoraEmailSendMethodTest implements LinagoraEmailSend
     }
 
     @Test
+    @Tag(BasicFeature.TAG)
     void durableIdentityShouldFenceSecondEmailSendOnDistributedCassandraAndRabbitMQ(GuiceJamesServer server) {
         String idempotencyKey = UUID.randomUUID().toString();
         String request = LinagoraEmailSendMethodContract$.MODULE$.bobSendsAMailToAndre(server)
