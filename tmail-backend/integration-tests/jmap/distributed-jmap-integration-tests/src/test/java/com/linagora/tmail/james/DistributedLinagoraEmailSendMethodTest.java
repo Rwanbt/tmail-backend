@@ -18,11 +18,21 @@
 
 package com.linagora.tmail.james;
 
+import static io.restassured.RestAssured.given;
+import static org.assertj.core.api.Assertions.assertThat;
+
+import java.util.UUID;
+
 import org.apache.james.JamesServerBuilder;
 import org.apache.james.JamesServerExtension;
 import org.apache.james.backends.redis.RedisExtension;
 import org.apache.james.mailbox.cassandra.ids.CassandraMessageId;
 import org.apache.james.mailbox.model.MessageId;
+import org.apache.james.GuiceJamesServer;
+import org.apache.james.mailbox.model.MultimailboxesSearchQuery;
+import org.apache.james.mailbox.model.SearchQuery;
+import org.apache.james.modules.MailboxProbeImpl;
+import org.junit.jupiter.api.Test;
 import org.apache.james.modules.AwsS3BlobStoreExtension;
 import org.junit.jupiter.api.extension.RegisterExtension;
 
@@ -36,6 +46,7 @@ import com.linagora.tmail.james.app.DockerOpenSearchExtension;
 import com.linagora.tmail.james.app.EventBusKeysChoice;
 import com.linagora.tmail.james.app.RabbitMQExtension;
 import com.linagora.tmail.james.common.LinagoraEmailSendMethodContract;
+import com.linagora.tmail.james.common.LinagoraEmailSendMethodContract$;
 import com.linagora.tmail.james.jmap.firebase.FirebaseModuleChooserConfiguration;
 import com.linagora.tmail.module.LinagoraTestJMAPServerModule;
 
@@ -73,5 +84,27 @@ public class DistributedLinagoraEmailSendMethodTest implements LinagoraEmailSend
     @Override
     public MessageId randomMessageId() {
         return MESSAGE_ID_FACTORY.of(Uuids.timeBased());
+    }
+
+    @Test
+    void durableIdentityShouldFenceSecondEmailSendOnDistributedCassandraAndRabbitMQ(GuiceJamesServer server) {
+        String idempotencyKey = UUID.randomUUID().toString();
+        String request = LinagoraEmailSendMethodContract$.MODULE$.bobSendsAMailToAndre(server)
+            .replace("\"K87\": {", "\"K87\": {\"idempotencyKey\": \"" + idempotencyKey + "\",");
+
+        String created = given().body(request).when().post()
+            .then().statusCode(200).extract().body().asString();
+        assertThat(created).contains("\"created\"", "\"K87\"");
+
+        String replay = given().body(request).when().post()
+            .then().statusCode(200).extract().body().asString();
+        assertThat(replay).contains("\"notCreated\"", "\"K87\"",
+            "Queue acceptance is uncertain; retrying may send this email twice");
+
+        assertThat(server.getProbe(MailboxProbeImpl.class)
+            .searchMessage(MultimailboxesSearchQuery.from(SearchQuery.of(SearchQuery.all())).build(),
+                bobUsername().asString(), 100))
+            .as("durable replay must not append a second sender copy")
+            .hasSize(1);
     }
 }
