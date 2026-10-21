@@ -1,0 +1,62 @@
+name: Distributed Cassandra Email/send outbox
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/email-send-outbox-distributed.yml'
+      - 'tmail-backend/jmap/extensions-cassandra/**'
+      - 'tmail-backend/apps/distributed/**'
+      - 'tmail-backend/integration-tests/jmap/distributed-jmap-integration-tests/**'
+      - 'james-project'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  cassandra-outbox:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 85
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+          submodules: recursive
+      - uses: actions/setup-java@dded0888837ed1f317902acf8a20df0ad188d165 # v4
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+      - name: Check immutable Apache James and Docker runtime
+        run: |
+          set -euo pipefail
+          test "$(git -C james-project rev-parse HEAD)" = "$(git ls-tree HEAD james-project | awk '{print $3}')"
+          docker info >/dev/null
+      - name: Real Cassandra concurrent LWT and distributed Email/send + RabbitMQ
+        timeout-minutes: 75
+        run: |
+          set -euo pipefail
+          mvn -B -ntp -pl :distributed-jmap-integration-tests,:jmap-extensions-cassandra -am \
+            -Dtest=CassandraEmailSendOutboxTest,DistributedLinagoraEmailSendMethodTest \
+            -Dsurefire.failIfNoSpecifiedTests=false \
+            test
+      - name: Verify critical tests executed
+        run: |
+          python3 ci/verify_jmap_surefire.py \
+            tmail-backend/jmap/extensions-cassandra/target/surefire-reports \
+            com.linagora.tmail.james.jmap.method.CassandraEmailSendOutboxTest \
+            --require com.linagora.tmail.james.jmap.method.CassandraEmailSendOutboxTest:onlyOneNodeCanReserveAndDispatchAndReplaysStayBlocked \
+            --require com.linagora.tmail.james.jmap.method.CassandraEmailSendOutboxTest:payloadConflictsFailClosedAcrossNodes \
+            --require com.linagora.tmail.james.jmap.method.CassandraEmailSendOutboxTest:unknownOwnerCannotCompleteAnotherNodesClaim
+          python3 ci/verify_jmap_surefire.py \
+            tmail-backend/integration-tests/jmap/distributed-jmap-integration-tests/target/surefire-reports \
+            DistributedLinagoraEmailSendMethodTest \
+            --require DistributedLinagoraEmailSendMethodTest:durableIdentityShouldFenceSecondEmailSendOnDistributedCassandraAndRabbitMQ
+      - name: Upload Surefire reports
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: distributed-email-send-outbox-surefire
+          path: |
+            tmail-backend/jmap/extensions-cassandra/target/surefire-reports/
+            tmail-backend/integration-tests/jmap/distributed-jmap-integration-tests/target/surefire-reports/
