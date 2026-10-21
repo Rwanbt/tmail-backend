@@ -35,7 +35,6 @@ import org.apache.james.JamesServerBuilder;
 import org.apache.james.JamesServerExtension;
 import org.apache.james.backends.redis.RedisExtension;
 import org.apache.james.junit.categories.BasicFeature;
-import org.apache.james.jmap.rfc8621.contract.Fixture;
 import org.apache.james.mailbox.cassandra.ids.CassandraMessageId;
 import org.apache.james.mailbox.model.MessageId;
 import org.apache.james.mailbox.model.MultimailboxesSearchQuery;
@@ -167,7 +166,7 @@ public class DistributedLinagoraEmailSendMethodTest implements LinagoraEmailSend
                 .as("one sender append across concurrent JMAP calls").hasSize(1);
             assertThat(server.getProbe(MailboxProbeImpl.class)
                 .searchMessage(MultimailboxesSearchQuery.from(SearchQuery.of(SearchQuery.all())).build(),
-                    Fixture.ANDRE().asString(), 100))
+                    andreUsername().asString(), 100))
                 .as("one genuine delivered recipient message").hasSize(1);
         });
         Awaitility.await().during(Duration.ofSeconds(3)).atMost(Duration.ofSeconds(15))
@@ -177,7 +176,7 @@ public class DistributedLinagoraEmailSendMethodTest implements LinagoraEmailSend
                         bobUsername().asString(), 100)).hasSize(1);
                 assertThat(server.getProbe(MailboxProbeImpl.class)
                     .searchMessage(MultimailboxesSearchQuery.from(SearchQuery.of(SearchQuery.all())).build(),
-                        Fixture.ANDRE().asString(), 100)).hasSize(1);
+                        andreUsername().asString(), 100)).hasSize(1);
             });
     }
 
