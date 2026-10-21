@@ -31,7 +31,6 @@ import org.apache.james.backends.redis.RedisExtension;
 import org.apache.james.junit.categories.BasicFeature;
 import org.apache.james.mailbox.cassandra.ids.CassandraMessageId;
 import org.apache.james.mailbox.model.MessageId;
-import org.apache.james.mailbox.model.MessageResult;
 import org.apache.james.mailbox.model.MultimailboxesSearchQuery;
 import org.apache.james.mailbox.model.SearchQuery;
 import org.apache.james.modules.AwsS3BlobStoreExtension;
@@ -108,7 +107,7 @@ public class DistributedLinagoraEmailSendMethodTest implements LinagoraEmailSend
             () -> server.getProbe(MailboxProbeImpl.class)
                 .searchMessage(MultimailboxesSearchQuery.from(SearchQuery.of(SearchQuery.all())).build(),
                     bobUsername().asString(), 100),
-            messages -> messages.size() == 1).get(0).getMessageId();
+            messages -> messages.size() == 1).iterator().next();
 
         String replay = given().body(request).when().post()
             .then().statusCode(200).extract().body().asString();
@@ -121,7 +120,6 @@ public class DistributedLinagoraEmailSendMethodTest implements LinagoraEmailSend
                 .searchMessage(MultimailboxesSearchQuery.from(SearchQuery.of(SearchQuery.all())).build(),
                     bobUsername().asString(), 100))
                 .as("durable replay must not append a second sender copy")
-                .extracting(MessageResult::getMessageId)
                 .containsExactly(originalId));
     }
 }
