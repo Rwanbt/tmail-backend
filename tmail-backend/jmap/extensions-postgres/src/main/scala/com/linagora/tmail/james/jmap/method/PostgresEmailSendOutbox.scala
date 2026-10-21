@@ -2,13 +2,11 @@ package com.linagora.tmail.james.jmap.method
 
 import com.google.inject.AbstractModule
 import com.linagora.tmail.jmap.postgres.EmailSendOutboxDao
-import jakarta.inject.Inject
+import jakarta.inject.{Inject, Named}
 import org.apache.james.backends.postgres.utils.PostgresExecutor
 import org.apache.james.backends.postgres.utils.PostgresExecutor.DEFAULT_INJECT
 import play.api.libs.json.{JsArray, JsString, Json}
 import reactor.core.scala.publisher.SMono
-
-import jakarta.inject.Named
 
 class PostgresEmailSendOutbox @Inject()(@Named(DEFAULT_INJECT) executor: PostgresExecutor) extends EmailSendOutbox {
   private val dao = new EmailSendOutboxDao(executor)
