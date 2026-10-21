@@ -1,4 +1,4 @@
-package com.linagora.tmail.jmap.postgres;
+package com.linagora.tmail.james;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -10,6 +10,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
 
+import com.linagora.tmail.jmap.postgres.EmailSendOutboxDao;
+import com.linagora.tmail.jmap.postgres.EmailSendOutboxDataDefinition;
 import com.linagora.tmail.jmap.postgres.EmailSendOutboxDao.RegistrationDecision;
 
 class EmailSendOutboxDurablePayloadTest {
