@@ -18,8 +18,11 @@
 
 package com.linagora.tmail.james.jmap.method
 
+import java.nio.charset.StandardCharsets
+import java.security.MessageDigest
 import java.time.ZonedDateTime
 import java.util.Date
+import java.util.UUID
 
 import com.google.inject.multibindings.{Multibinder, ProvidesIntoSet}
 import com.google.inject.{AbstractModule, Scopes}
@@ -60,7 +63,7 @@ import org.apache.james.util.html.HtmlTextExtractor
 import org.apache.james.utils.{InitializationOperation, InitilizationOperationBuilder}
 import org.apache.mailet.{Attribute, AttributeValue, Mail}
 import org.reactivestreams.Publisher
-import play.api.libs.json.{JsError, JsObject, JsSuccess}
+import play.api.libs.json.{JsArray, JsError, JsObject, JsSuccess, JsValue, Json}
 import reactor.core.publisher.Mono
 import reactor.core.scala.publisher.{SFlux, SMono}
 import reactor.core.scheduler.Schedulers
@@ -73,6 +76,7 @@ import scala.util.{Failure, Success, Try}
 class EmailSendMethodModule extends AbstractModule {
   override def configure(): Unit = {
     bind(classOf[EmailSendMethod]).in(Scopes.SINGLETON)
+    bind(classOf[EmailSendOutbox]).to(classOf[DisabledEmailSendOutbox]).in(Scopes.SINGLETON)
 
     Multibinder.newSetBinder(binder(), classOf[Method])
       .addBinding()
@@ -89,6 +93,20 @@ class EmailSendMethodModule extends AbstractModule {
 }
 
 object EmailSendMethod {
+  private[method] def canonicalJson(value: JsValue): String = value match {
+    case obj: JsObject =>
+      obj.fields.sortBy(_._1).map { case (key, field) =>
+        Json.stringify(play.api.libs.json.JsString(key)) + ":" + canonicalJson(field)
+      }.mkString("{", ",", "}")
+    case array: JsArray => array.value.map(canonicalJson).mkString("[", ",", "]")
+    case primitive => Json.stringify(primitive)
+  }
+
+  private[method] def sha256(value: String): String =
+    MessageDigest.getInstance("SHA-256")
+      .digest(value.getBytes(StandardCharsets.UTF_8))
+      .map(byte => f"${byte & 0xff}%02x").mkString
+
   // Pinned Apache James RabbitMQ Enqueuer.saveMail throws this exact
   // MailQueueException synchronously BEFORE publishing a queue reference.
   // Only this narrow case proves failure before broker acceptance.
@@ -142,7 +160,8 @@ class EmailSendMethod @Inject()(emailSetSerializer: EmailSetSerializer,
                                 configuration: JMAPConfiguration,
                                 val metricFactory: MetricFactory,
                                 val sessionTranslator: SessionTranslator,
-                                val sessionSupplier: SessionSupplier) extends MethodRequiringAccountId[EmailSendRequest] with Startable {
+                                val sessionSupplier: SessionSupplier,
+                                outbox: EmailSendOutbox) extends MethodRequiringAccountId[EmailSendRequest] with Startable {
 
   override val methodName: MethodName = MethodName("Email/send")
 
@@ -212,15 +231,31 @@ class EmailSendMethod @Inject()(emailSetSerializer: EmailSetSerializer,
                          processingContext: ProcessingContext): SMono[(EmailSendResults, ProcessingContext)] = {
     parseCreationRequest(jsObject)
       .fold(error => SMono.error(error),
-        createEmailAndEmailSubmission(clientId, mailboxSession, _))
+        request => createEmailAndEmailSubmission(clientId, mailboxSession, request, jsObject))
       .map(response => EmailSendResults.created(clientId, response) -> processingContext)
       .onErrorResume(error => SMono.just(EmailSendResults.notCreated(clientId, error) -> processingContext))
   }
 
   private def createEmailAndEmailSubmission(clientId: EmailSendCreationId,
                                             mailboxSession: MailboxSession,
-                                            request: EmailSendCreationRequest): SMono[EmailSendCreationResponse] =
+                                            request: EmailSendCreationRequest,
+                                            sourceJson: JsObject): SMono[EmailSendCreationResponse] = {
+    // Opt-in until all legacy clients can supply a stable idempotencyKey.
+    // The key is scoped to the authenticated principal, never to a JMAP call id
+    // (which changes across client retries).
+    val durableKey = request.idempotencyKey.filter(_ => outbox.enabled)
+      .map(key => EmailSendMethod.sha256(mailboxSession.getUser.asString() + "\u0000" + key))
+    val reservation: SMono[Unit] = durableKey match {
+      case Some(key) =>
+        val payload = EmailSendMethod.canonicalJson(sourceJson)
+        outbox.reserve(key, EmailSendMethod.sha256(payload), payload)
+          .flatMap(isNew => if (isNew) SMono.just(())
+            else SMono.error(EmailSubmissionOutcomeUnknownException(
+              new IllegalStateException("submission already reserved"))))
+      case None => SMono.just(())
+    }
     EmailSendMethod.requireReadyQueue(queue)
+      .flatMap(_ => reservation)
       .flatMap(_ => createEmail(clientId, mailboxSession, request.emailCreate, request.emailSubmissionSet.envelope))
       .flatMap {
         case failure: EmailSetCreationFailure => SMono.error(failure.error)
@@ -229,10 +264,11 @@ class EmailSendMethod @Inject()(emailSetSerializer: EmailSetSerializer,
             mailboxSession,
             success.response,
             success.originalMessage,
-            request.emailSubmissionSet)
+            request.emailSubmissionSet,
+            durableKey)
             .onErrorResume {
               case uncertain: EmailSubmissionOutcomeUnknownException
-                  if EmailSendMethod.isProvenPrePublicationFailure(uncertain.getCause) =>
+                  if durableKey.isEmpty && EmailSendMethod.isProvenPrePublicationFailure(uncertain.getCause) =>
                 // An error while storing the MIME blob predates any publish.
                 // Only this failure allows safe, precisely targeted cleanup.
                 EmailSendMethod.preserveUncertainOnCleanupFailure(
@@ -251,6 +287,7 @@ class EmailSendMethod @Inject()(emailSetSerializer: EmailSetSerializer,
               case unknown => SMono.error[EmailSendCreationResponse](unknown)
             }
       }
+  }
 
   private def parseCreationRequest(jsObject: JsObject): Either[EmailSendCreationRequestInvalidException, EmailSendCreationRequest] =
     EmailSendCreationRequest.validateProperties(jsObject)
@@ -293,42 +330,56 @@ class EmailSendMethod @Inject()(emailSetSerializer: EmailSetSerializer,
   def createEmailSubmission(mailboxSession: MailboxSession,
                             emailCreationResponse: EmailCreationResponse,
                             originalMessage: Array[Byte],
-                            request: EmailSubmissionCreationRequest): SMono[EmailSendCreationResponse] = {
+                            request: EmailSubmissionCreationRequest,
+                            durableKey: Option[String] = None): SMono[EmailSendCreationResponse] = {
     val emailId: MessageId = emailCreationResponse.id
     val submissionId: EmailSubmissionId = EmailSubmissionId.generate
-    for {
-      message <- SMono.fromTry(toMimeMessage(submissionId.value, originalMessage))
-      envelope <- SMono.fromTry(resolveEnvelope(message, request.envelope))
-      _ <- validate(mailboxSession)(message, envelope)
-      mail <- SMono.fromCallable(() => {
-        val mailImpl: MailImpl = MailImpl.builder()
-          .name(submissionId.value.value)
-          .addRecipients(envelope.rcptTo.map(_.email).asJava)
-          .sender(envelope.mailFrom.email)
-          .addAttribute(new Attribute(Mail.JMAP_AUTH_USER, AttributeValue.of(mailboxSession.getUser.asString())))
-          .build()
-        mailImpl.setMessageNoCopy(message)
-        mailImpl
-      })
-      // The queue may fail or the subscriber may cancel. In both cases the
-      // original success-only cleanup leaked the MIME-backed MailImpl.
-      _ <- SMono.fromPublisher(EmailSendMethod.withResourceCleanup(
-        mail,
-        (pending: MailImpl) => queue.enqueueReactive(pending),
-        (pending: MailImpl) => LifecycleUtil.dispose(pending)))
-        // The broker can accept the mail and lose its ACK. An enqueue error
-        // therefore does not prove that no delivery occurred. Never delete
-        // the sender copy or encourage an automatic resend in this case.
-        .onErrorResume(error => SMono.error(EmailSubmissionOutcomeUnknownException(error)))
-        .`then`(SMono.just(submissionId))
-    } yield {
-      EmailSendCreationResponse(
-        emailSubmissionId = submissionId,
-        emailId = emailId,
-        blobId = emailCreationResponse.blobId,
-        threadId = emailCreationResponse.threadId,
-        size = emailCreationResponse.size)
-    }
+    val durableOutbox = if (durableKey.isDefined) outbox else new DisabledEmailSendOutbox
+    val owner = UUID.randomUUID().toString
+    SMono.fromTry(toMimeMessage(submissionId.value, originalMessage))
+      .flatMap(message => SMono.fromPublisher(EmailSendMethod.withResourceCleanup(
+        message,
+        (initial: MimeMessageWrapper) => {
+          for {
+            envelope <- SMono.fromTry(resolveEnvelope(initial, request.envelope))
+            _ <- validate(mailboxSession)(initial, envelope)
+            staged <- durableOutbox.stageAndClaim(durableKey.getOrElse(""), owner,
+              OutboxMail(originalMessage, envelope.mailFrom.email.asString,
+                envelope.rcptTo.map(_.email.asString), mailboxSession.getUser.asString(), submissionId.value.value))
+            outgoing <- SMono.fromTry(toMimeMessage(staged.submissionId, staged.mime))
+            mail <- SMono.fromCallable(() => {
+              val mailImpl = MailImpl.builder()
+                .name(staged.submissionId)
+                .addRecipients(staged.recipients.map(new MailAddress(_)).asJava)
+                .sender(new MailAddress(staged.from))
+                .addAttribute(new Attribute(Mail.JMAP_AUTH_USER, AttributeValue.of(staged.authUser)))
+                .build()
+              mailImpl.setMessageNoCopy(outgoing)
+              mailImpl
+            })
+            _ <- SMono.fromPublisher(EmailSendMethod.withResourceCleanup(
+              mail,
+              (pending: MailImpl) => queue.enqueueReactive(pending),
+              (pending: MailImpl) => LifecycleUtil.dispose(pending)))
+              // Any RabbitMQ error can follow broker acceptance; permanently
+              // block automatic resend, including when the uncertainty write fails.
+              .onErrorResume(error => {
+                val uncertain = EmailSubmissionOutcomeUnknownException(error)
+                durableOutbox.finish(durableKey.getOrElse(""), owner, accepted = false)
+                  .onErrorResume(_ => SMono.just(()))
+                  .flatMap(_ => SMono.error[Unit](uncertain))
+              })
+              .`then`(SMono.just(()))
+            _ <- durableOutbox.finish(durableKey.getOrElse(""), owner, accepted = true)
+              .onErrorResume(error => SMono.error[Unit](EmailSubmissionOutcomeUnknownException(error)))
+          } yield EmailSendCreationResponse(
+            emailSubmissionId = submissionId,
+            emailId = emailId,
+            blobId = emailCreationResponse.blobId,
+            threadId = emailCreationResponse.threadId,
+            size = emailCreationResponse.size)
+        }.asJava(),
+        (pending: MimeMessageWrapper) => LifecycleUtil.dispose(pending))))
   }
 
   def toMimeMessage(name: String, message: Array[Byte]): Try[MimeMessageWrapper] = {

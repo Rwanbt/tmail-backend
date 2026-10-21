@@ -44,7 +44,8 @@ object EmailSendSerializer {
 
   private implicit val emailSendCreationRequestRawReads: Reads[EmailSendCreationRequestRaw] = (
     (JsPath \ "email/create").read[JsObject] and
-      (JsPath \ "emailSubmission/set").read[JsObject]
+      (JsPath \ "emailSubmission/set").read[JsObject] and
+      (JsPath \ "idempotencyKey").readNullable[String]
     ) (EmailSendCreationRequestRaw.apply _)
 
   private implicit val creationIdFormat: Format[EmailSendCreationId] = Json.valueFormat[EmailSendCreationId]

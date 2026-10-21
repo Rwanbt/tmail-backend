@@ -36,6 +36,14 @@ public interface EmailSendOutboxDataDefinition {
     Table<Record> TABLE_NAME = DSL.table("tmail_email_send_outbox");
     Field<String> SUBMISSION_KEY = DSL.field("submission_key", SQLDataType.CHAR(64).nullable(false));
     Field<String> PAYLOAD_DIGEST = DSL.field("payload_digest", SQLDataType.CHAR(64).nullable(false));
+    // Persist the original request before creating the sender copy. MIME and
+    // resolved delivery metadata must be durable before the publication claim.
+    Field<String> REQUEST_PAYLOAD = DSL.field("request_payload", SQLDataType.LONGVARCHAR);
+    Field<byte[]> MIME_PAYLOAD = DSL.field("mime_payload", SQLDataType.BLOB);
+    Field<String> MAIL_FROM = DSL.field("mail_from", SQLDataType.VARCHAR(320));
+    Field<String> RECIPIENTS_JSON = DSL.field("recipients_json", SQLDataType.LONGVARCHAR);
+    Field<String> AUTH_USER = DSL.field("auth_user", SQLDataType.VARCHAR(512));
+    Field<String> SUBMISSION_ID = DSL.field("submission_id", SQLDataType.VARCHAR(255));
     Field<String> OWNER_ID = DSL.field("owner_id", SQLDataType.VARCHAR);
     Field<String> STATE = DSL.field("state", SQLDataType.VARCHAR(32).nullable(false).defaultValue("prepared"));
     Field<Long> VERSION = DSL.field("version", SQLDataType.BIGINT.nullable(false).defaultValue(0L));
@@ -47,6 +55,12 @@ public interface EmailSendOutboxDataDefinition {
         .createTableStep((dsl, name) -> dsl.createTableIfNotExists(name)
             .column(SUBMISSION_KEY)
             .column(PAYLOAD_DIGEST)
+            .column(REQUEST_PAYLOAD)
+            .column(MIME_PAYLOAD)
+            .column(MAIL_FROM)
+            .column(RECIPIENTS_JSON)
+            .column(AUTH_USER)
+            .column(SUBMISSION_ID)
             .column(OWNER_ID)
             .column(STATE)
             .column(VERSION)
@@ -60,6 +74,13 @@ public interface EmailSendOutboxDataDefinition {
                     .and(DSL.condition("submission_key ~ '^[0-9a-f]+$'"))
                     .and(DSL.condition("payload_digest ~ '^[0-9a-f]+$'"))))
             .constraint(DSL.constraint("outbox_version_valid").check(VERSION.ge(0L)))
+            .constraint(DSL.constraint("outbox_dispatch_payload_valid")
+                .check(REQUEST_PAYLOAD.isNull().or(STATE.eq("prepared"))
+                    .or(MIME_PAYLOAD.isNotNull()
+                        .and(MAIL_FROM.isNotNull())
+                        .and(RECIPIENTS_JSON.isNotNull())
+                        .and(AUTH_USER.isNotNull())
+                        .and(SUBMISSION_ID.isNotNull()))))
             .constraint(DSL.constraint("outbox_owner_valid")
                 .check(STATE.eq("dispatching").and(OWNER_ID.isNotNull()).and(DSL.length(OWNER_ID).gt(0))
                     .or(STATE.ne("dispatching").and(OWNER_ID.isNull()))))

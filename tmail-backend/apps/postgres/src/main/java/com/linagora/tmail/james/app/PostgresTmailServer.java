@@ -176,6 +176,7 @@ import com.linagora.tmail.james.jmap.method.ForwardSetMethodModule;
 import com.linagora.tmail.james.jmap.method.JmapSettingsMethodModule;
 import com.linagora.tmail.james.jmap.method.LabelMethodModule;
 import com.linagora.tmail.james.jmap.method.MailboxClearMethodModule;
+import com.linagora.tmail.james.jmap.method.PostgresEmailSendOutboxModule;
 import com.linagora.tmail.james.jmap.module.OSContactAutoCompleteModule;
 import com.linagora.tmail.james.jmap.oidc.OidcBackchannelLogoutRoutesModule;
 import com.linagora.tmail.james.jmap.oidc.TMailOidcRedisKeyPrefixModule;
@@ -426,6 +427,7 @@ public class PostgresTmailServer {
             new PostgresJmapSettingsRepositoryModule(),
             new PostgresPublicAssetRepositoryModule(),
             new PostgresTicketStoreModule(),
+            new PostgresEmailSendOutboxModule(),
             new TasksHeathCheckModule(),
             chooseQueueModules(configuration),
             new TMailIMAPModule(),
