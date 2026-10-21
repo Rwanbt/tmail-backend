@@ -33,6 +33,7 @@ class EmailSendOutboxDurablePayloadTest {
         assertThat(dao.reserve(key, digest, "{\"draft\":1}").block()).isEqualTo(RegistrationDecision.ALREADY_REGISTERED);
         assertThatThrownBy(() -> dao.reserve(key, digest, "{\"draft\":2}").block())
             .isInstanceOf(IllegalArgumentException.class);
+        assertThat(dao.claim(key, 0, "bypass-payload-stage").block()).isZero();
         assertThat(dao.loadClaimed(key, "owner").block()).isNull();
 
         assertThat(dao.stageAndClaim(key, "owner", mime, "sender@example.com",
