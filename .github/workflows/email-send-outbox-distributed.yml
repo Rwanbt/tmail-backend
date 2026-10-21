@@ -48,6 +48,10 @@ jobs:
             --require com.linagora.tmail.james.jmap.method.CassandraEmailSendOutboxTest:onlyOneNodeCanReserveAndDispatchAndReplaysStayBlocked \
             --require com.linagora.tmail.james.jmap.method.CassandraEmailSendOutboxTest:payloadConflictsFailClosedAcrossNodes \
             --require com.linagora.tmail.james.jmap.method.CassandraEmailSendOutboxTest:unknownOwnerCannotCompleteAnotherNodesClaim
+            --require com.linagora.tmail.james.jmap.method.CassandraEmailSendOutboxTest:stalePreparedReservationIsPermanentlyFencedAcrossNodesWithoutInventingMime \
+            --require com.linagora.tmail.james.jmap.method.CassandraEmailSendOutboxTest:staleDispatchIsQuarantinedButOriginalMimeAndEnvelopeRemainForReconciliation \
+            --require com.linagora.tmail.james.jmap.method.CassandraEmailSendOutboxTest:recentDispatchAndTerminalSuccessCannotBeQuarantinedByConcurrentReplay \
+            --require com.linagora.tmail.james.jmap.method.CassandraEmailSendOutboxTest:simultaneousReplaysOfAbandonedDispatchNeverRestorePublishPermission
           python3 ci/verify_jmap_surefire.py \
             tmail-backend/integration-tests/jmap/distributed-jmap-integration-tests/target/surefire-reports \
             DistributedLinagoraEmailSendMethodTest \
