@@ -3,11 +3,9 @@ package com.linagora.tmail.james.jmap.method
 import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
 
-import com.datastax.oss.driver.api.core.CqlSession
+import com.datastax.oss.driver.api.core.{CqlSession, DefaultConsistencyLevel}
 import com.datastax.oss.driver.api.core.`type`.DataTypes
 import com.datastax.oss.driver.api.core.cql.{BoundStatement, Row}
-import com.datastax.oss.driver.api.core.DefaultConsistencyLevel
-import com.datastax.oss.driver.api.querybuilder.SchemaBuilder
 import com.google.inject.AbstractModule
 import com.google.inject.multibindings.Multibinder
 import jakarta.inject.Inject
@@ -59,12 +57,11 @@ class CassandraEmailSendOutbox @Inject()(session: CqlSession) extends EmailSendO
   private val readClaim = session.prepare(s"SELECT mime_payload, mail_from, recipients_json, auth_user, submission_id, owner_id, state, version FROM $table WHERE submission_key = ?")
   private val complete = session.prepare(s"UPDATE $table SET state = ?, owner_id = null, version = 2 WHERE submission_key = ? IF state = 'dispatching' AND version = 1 AND owner_id = ?")
 
-  private def quorum(statement: BoundStatement): BoundStatement =
-    statement.setConsistencyLevel(DefaultConsistencyLevel.LOCAL_QUORUM)
-      .setSerialConsistencyLevel(DefaultConsistencyLevel.LOCAL_SERIAL)
-
-  private def execute(statement: BoundStatement): SMono[com.datastax.oss.driver.api.core.cql.AsyncResultSet] =
-    SMono.fromPublisher(Mono.fromCompletionStage(() => session.executeAsync(quorum(statement))))
+  private def execute(statement: BoundStatement, conditional: Boolean = false): SMono[com.datastax.oss.driver.api.core.cql.AsyncResultSet] = {
+    val quorum = statement.setConsistencyLevel(DefaultConsistencyLevel.LOCAL_QUORUM)
+    val prepared = if (conditional) quorum.setSerialConsistencyLevel(DefaultConsistencyLevel.LOCAL_SERIAL) else quorum
+    SMono.fromPublisher(Mono.fromCompletionStage(() => session.executeAsync(prepared)))
+  }
 
   private def load(key: String): SMono[Row] =
     execute(readReservation.bind(key)).flatMap(result =>
@@ -75,7 +72,7 @@ class CassandraEmailSendOutbox @Inject()(session: CqlSession) extends EmailSendO
     if (!validFingerprint(key) || !validFingerprint(digest) || !safeSize(requestBytes)) {
       SMono.error(new IllegalArgumentException("invalid distributed outbox reservation"))
     } else {
-      execute(insert.bind(key, digest, requestJson)).flatMap(result =>
+      execute(insert.bind(key, digest, requestJson), conditional = true).flatMap(result =>
         load(key)
           .switchIfEmpty(SMono.error(new IllegalStateException("outbox reservation not visible")))
           .map(row => {
@@ -95,7 +92,7 @@ class CassandraEmailSendOutbox @Inject()(session: CqlSession) extends EmailSendO
     } else {
       val recipients = Json.stringify(JsArray(mail.recipients.map(JsString.apply)))
       execute(stage.bind(ByteBuffer.wrap(mail.mime), mail.from, recipients,
-        mail.authUser, mail.submissionId, owner, key))
+        mail.authUser, mail.submissionId, owner, key), conditional = true)
         .flatMap(result => if (!result.wasApplied()) {
           SMono.error(new IllegalStateException("outbox dispatch claim unavailable"))
         } else {
@@ -120,7 +117,7 @@ class CassandraEmailSendOutbox @Inject()(session: CqlSession) extends EmailSendO
     if (!validFingerprint(key) || !validText(owner)) {
       SMono.error(new IllegalArgumentException("invalid outbox completion owner"))
     } else {
-      execute(complete.bind(if (accepted) "accepted" else "acceptance_unknown", key, owner))
+      execute(complete.bind(if (accepted) "accepted" else "acceptance_unknown", key, owner), conditional = true)
         .flatMap(result => if (result.wasApplied()) SMono.just(())
           else SMono.error(new IllegalStateException("outbox finish CAS lost")))
     }
