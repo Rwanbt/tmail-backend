@@ -105,17 +105,17 @@ class CassandraEmailSendOutboxTest {
         seedStale("prepared", 0L, null, null);
         // A previous process may have appended a sender copy before crashing.
         // No replay may claim this original version-0 reservation.
-        assertThat(nodeB.reserve(key, DIGEST, "{\"hello\":1}").asJava().block()).isFalse();
+        assertThat(nodeB.reserve(key, DIGEST, "{\"hello\":1}").asJava().block()).isEqualTo(false);
         Row quarantined = row();
         assertThat(quarantined.getString("state")).isEqualTo("prepared");
         assertThat(quarantined.getLong("version")).isEqualTo(1L);
-        assertThat(quarantined.isNull("mime_payload")).isTrue();
-        assertThat(quarantined.isNull("owner_id")).isTrue();
+        assertThat(quarantined.isNull("mime_payload")).isEqualTo(true);
+        assertThat(quarantined.isNull("owner_id")).isEqualTo(true);
 
         OutboxMail late = mail("late MIME");
         assertThatThrownBy(() -> nodeA.stageAndClaim(key, "late-original", late).asJava().block())
             .hasMessageContaining("outbox dispatch claim unavailable");
-        assertThat(nodeB.reserve(key, DIGEST, "{\"hello\":1}").asJava().block()).isFalse();
+        assertThat(nodeB.reserve(key, DIGEST, "{\"hello\":1}").asJava().block()).isEqualTo(false);
         assertThat(row().getLong("version")).isEqualTo(1L);
     }
 
@@ -125,11 +125,11 @@ class CassandraEmailSendOutboxTest {
             .getBytes(StandardCharsets.UTF_8);
         seedStale("dispatching", 1L, "crashed-owner", original);
 
-        assertThat(nodeB.reserve(key, DIGEST, "{\"hello\":1}").asJava().block()).isFalse();
+        assertThat(nodeB.reserve(key, DIGEST, "{\"hello\":1}").asJava().block()).isEqualTo(false);
         Row quarantined = row();
         assertThat(quarantined.getString("state")).isEqualTo("acceptance_unknown");
         assertThat(quarantined.getLong("version")).isEqualTo(2L);
-        assertThat(quarantined.isNull("owner_id")).isTrue();
+        assertThat(quarantined.isNull("owner_id")).isEqualTo(true);
         ByteBuffer stored = quarantined.getByteBuffer("mime_payload").duplicate();
         byte[] persisted = new byte[stored.remaining()];
         stored.get(persisted);
@@ -142,22 +142,22 @@ class CassandraEmailSendOutboxTest {
             .hasMessageContaining("outbox finish CAS lost");
         assertThatThrownBy(() -> nodeB.stageAndClaim(key, "replay-owner", mail("dangerous replay"))
             .asJava().block()).hasMessageContaining("outbox dispatch claim unavailable");
-        assertThat(nodeB.reserve(key, DIGEST, "{\"hello\":1}").asJava().block()).isFalse();
+        assertThat(nodeB.reserve(key, DIGEST, "{\"hello\":1}").asJava().block()).isEqualTo(false);
         assertThat(row().getLong("version")).isEqualTo(2L);
     }
 
     @Test
     void recentDispatchAndTerminalSuccessCannotBeQuarantinedByConcurrentReplay() {
-        assertThat(nodeA.reserve(key, DIGEST, "{\"hello\":1}").asJava().block()).isTrue();
+        assertThat(nodeA.reserve(key, DIGEST, "{\"hello\":1}").asJava().block()).isEqualTo(true);
         nodeA.stageAndClaim(key, "active-owner", mail("live MIME")).asJava().block();
 
-        assertThat(nodeB.reserve(key, DIGEST, "{\"hello\":1}").asJava().block()).isFalse();
+        assertThat(nodeB.reserve(key, DIGEST, "{\"hello\":1}").asJava().block()).isEqualTo(false);
         assertThat(row().getString("state")).isEqualTo("dispatching");
         assertThat(row().getLong("version")).isEqualTo(1L);
         assertThat(row().getString("owner_id")).isEqualTo("active-owner");
 
         nodeA.finish(key, "active-owner", true).asJava().block();
-        assertThat(nodeB.reserve(key, DIGEST, "{\"hello\":1}").asJava().block()).isFalse();
+        assertThat(nodeB.reserve(key, DIGEST, "{\"hello\":1}").asJava().block()).isEqualTo(false);
         assertThat(row().getString("state")).isEqualTo("accepted");
         assertThat(row().getLong("version")).isEqualTo(2L);
     }
@@ -176,7 +176,7 @@ class CassandraEmailSendOutboxTest {
         Row quarantined = row();
         assertThat(quarantined.getString("state")).isEqualTo("acceptance_unknown");
         assertThat(quarantined.getLong("version")).isEqualTo(2L);
-        assertThat(quarantined.isNull("owner_id")).isTrue();
+        assertThat(quarantined.isNull("owner_id")).isEqualTo(true);
         assertThatThrownBy(() -> nodeA.stageAndClaim(key, "node-after-crash", mail("repeat"))
             .asJava().block()).hasMessageContaining("outbox dispatch claim unavailable");
     }
