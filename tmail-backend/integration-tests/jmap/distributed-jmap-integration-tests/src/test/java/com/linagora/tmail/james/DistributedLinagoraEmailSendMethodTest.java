@@ -22,7 +22,13 @@ import static io.restassured.RestAssured.given;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Durations.TEN_SECONDS;
 
+import java.time.Duration;
+import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 import org.apache.james.GuiceJamesServer;
 import org.apache.james.JamesServerBuilder;
@@ -122,4 +128,69 @@ public class DistributedLinagoraEmailSendMethodTest implements LinagoraEmailSend
                 .as("durable replay must not append a second sender copy")
                 .containsExactly(originalId));
     }
+
+    @Test
+    @Tag(BasicFeature.TAG)
+    void concurrentKeyedJmapRequestsDeliverOnlyOneRecipientCopyThroughRealRabbitMQ(GuiceJamesServer server)
+        throws Exception {
+        String idempotencyKey = UUID.randomUUID().toString();
+        String request = LinagoraEmailSendMethodContract$.MODULE$.bobSendsAMailToAndre(server)
+            .replace("\"K87\": {", "\"K87\": {\"idempotencyKey\": \"" + idempotencyKey + "\",");
+
+        // Two independent HTTP invocations race for the SAME Cassandra LWT
+        // reservation, then the genuine James/RabbitMQ delivery path runs.
+        CountDownLatch releaseBoth = new CountDownLatch(1);
+        List<String> responses;
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            var first = CompletableFuture.supplyAsync(() -> sendWhenReleased(releaseBoth, request), executor);
+            var second = CompletableFuture.supplyAsync(() -> sendWhenReleased(releaseBoth, request), executor);
+            releaseBoth.countDown();
+            responses = List.of(first.get(2, TimeUnit.MINUTES), second.get(2, TimeUnit.MINUTES));
+        }
+        assertThat(responses.stream().filter(response -> response.contains("\"created\"")).count())
+            .as("exactly one keyed Email/send may be accepted")
+            .isEqualTo(1L);
+        assertThat(responses.stream().filter(response -> response.contains("\"notCreated\"")).count())
+            .as("the losing HTTP caller must not be authorized to send")
+            .isEqualTo(1L);
+        assertThat(responses.stream().filter(response -> response.contains("Queue acceptance is uncertain")).count())
+            .isEqualTo(1L);
+
+        // The original test checked the sender's Sent copy only. In addition
+        // prove actual RabbitMQ delivery to the recipient, and keep both
+        // mailboxes at ONE message across an observation interval.
+        Awaitility.await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> {
+            assertThat(server.getProbe(MailboxProbeImpl.class)
+                .searchMessage(MultimailboxesSearchQuery.from(SearchQuery.of(SearchQuery.all())).build(),
+                    bobUsername().asString(), 100))
+                .as("one sender append across concurrent JMAP calls").hasSize(1);
+            assertThat(server.getProbe(MailboxProbeImpl.class)
+                .searchMessage(MultimailboxesSearchQuery.from(SearchQuery.of(SearchQuery.all())).build(),
+                    andreUsername().asString(), 100))
+                .as("one genuine delivered recipient message").hasSize(1);
+        });
+        Awaitility.await().during(Duration.ofSeconds(3)).atMost(Duration.ofSeconds(15))
+            .untilAsserted(() -> {
+                assertThat(server.getProbe(MailboxProbeImpl.class)
+                    .searchMessage(MultimailboxesSearchQuery.from(SearchQuery.of(SearchQuery.all())).build(),
+                        bobUsername().asString(), 100)).hasSize(1);
+                assertThat(server.getProbe(MailboxProbeImpl.class)
+                    .searchMessage(MultimailboxesSearchQuery.from(SearchQuery.of(SearchQuery.all())).build(),
+                        andreUsername().asString(), 100)).hasSize(1);
+            });
+    }
+
+    private static String sendWhenReleased(CountDownLatch releaseBoth, String request) {
+        try {
+            if (!releaseBoth.await(30, TimeUnit.SECONDS)) {
+                throw new IllegalStateException("Concurrent Email/send start timed out");
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Concurrent Email/send interrupted", e);
+        }
+        return given().body(request).when().post()
+            .then().statusCode(200).extract().body().asString();
+    }
+
 }
