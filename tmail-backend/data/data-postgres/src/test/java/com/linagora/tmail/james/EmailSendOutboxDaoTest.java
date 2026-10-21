@@ -18,7 +18,7 @@
  *  You should have received a copy of the GNU Affero General       *
  *  Public License along with this program.                         *
  ********************************************************************/
-package com.linagora.tmail.jmap.postgres;
+package com.linagora.tmail.james;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -28,6 +28,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
 
+import com.linagora.tmail.jmap.postgres.EmailSendOutboxDao;
+import com.linagora.tmail.jmap.postgres.EmailSendOutboxDataDefinition;
 import com.linagora.tmail.jmap.postgres.EmailSendOutboxDao.RegistrationDecision;
 
 /** Exercises the actual PostgreSQL CAS and uniqueness constraints, including a DAO restart. */
