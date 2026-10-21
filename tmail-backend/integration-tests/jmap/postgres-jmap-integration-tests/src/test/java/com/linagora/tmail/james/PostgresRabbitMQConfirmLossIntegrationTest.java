@@ -33,6 +33,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
 
 import com.linagora.tmail.blob.guice.BlobStoreConfiguration;
+import com.linagora.tmail.james.app.PostgresEncryptedMailboxModule;
 import com.linagora.tmail.james.app.PostgresTmailConfiguration;
 import com.linagora.tmail.james.app.PostgresTmailServer;
 import com.linagora.tmail.james.common.LinagoraEmailSendMethodContract;
@@ -63,7 +64,12 @@ public class PostgresRabbitMQConfirmLossIntegrationTest implements LinagoraEmail
             .eventBusImpl(RABBITMQ)
             .build())
         .server(configuration -> PostgresTmailServer.createServer(configuration)
-            .overrideWith(new LinagoraTestJMAPServerModule()))
+            .overrideWith(new LinagoraTestJMAPServerModule())
+            // The inherited Email/send contract creates a PGP public key in
+            // @BeforeEach. Mirror the production encrypted-mailbox wiring of
+            // PostgresLinagoraEmailSendMethodTest, while replacing only its
+            // ActiveMQ queue with a genuine RabbitMQ broker below.
+            .overrideWith(new PostgresEncryptedMailboxModule()))
         .extension(POSTGRES)
         .extension(new DockerOpenSearchExtension())
         .extension(RABBIT)
