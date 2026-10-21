@@ -17,15 +17,15 @@
  ********************************************************************/
 package com.linagora.tmail.jmap.postgres;
 
+import static com.linagora.tmail.jmap.postgres.EmailSendOutboxDataDefinition.AUTH_USER;
+import static com.linagora.tmail.jmap.postgres.EmailSendOutboxDataDefinition.MAIL_FROM;
+import static com.linagora.tmail.jmap.postgres.EmailSendOutboxDataDefinition.MIME_PAYLOAD;
 import static com.linagora.tmail.jmap.postgres.EmailSendOutboxDataDefinition.OWNER_ID;
 import static com.linagora.tmail.jmap.postgres.EmailSendOutboxDataDefinition.PAYLOAD_DIGEST;
-import static com.linagora.tmail.jmap.postgres.EmailSendOutboxDataDefinition.REQUEST_PAYLOAD;
-import static com.linagora.tmail.jmap.postgres.EmailSendOutboxDataDefinition.MIME_PAYLOAD;
-import static com.linagora.tmail.jmap.postgres.EmailSendOutboxDataDefinition.MAIL_FROM;
 import static com.linagora.tmail.jmap.postgres.EmailSendOutboxDataDefinition.RECIPIENTS_JSON;
-import static com.linagora.tmail.jmap.postgres.EmailSendOutboxDataDefinition.AUTH_USER;
-import static com.linagora.tmail.jmap.postgres.EmailSendOutboxDataDefinition.SUBMISSION_ID;
+import static com.linagora.tmail.jmap.postgres.EmailSendOutboxDataDefinition.REQUEST_PAYLOAD;
 import static com.linagora.tmail.jmap.postgres.EmailSendOutboxDataDefinition.STATE;
+import static com.linagora.tmail.jmap.postgres.EmailSendOutboxDataDefinition.SUBMISSION_ID;
 import static com.linagora.tmail.jmap.postgres.EmailSendOutboxDataDefinition.SUBMISSION_KEY;
 import static com.linagora.tmail.jmap.postgres.EmailSendOutboxDataDefinition.TABLE_NAME;
 import static com.linagora.tmail.jmap.postgres.EmailSendOutboxDataDefinition.VERSION;
