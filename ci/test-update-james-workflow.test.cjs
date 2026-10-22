@@ -42,3 +42,25 @@ test('privileged scheduled/manual update cannot run against a non-master ref or 
   assert.match(workflow, /git submodule update --remote james-project\b/)
   assert.doesNotMatch(workflow, /git submodule update --remote\s*\r?\n/)
 })
+
+test('pull request creation is probed before it is attempted', () => {
+  assert.match(workflow, /id: pr-capability/)
+  assert.match(workflow, /api\.github\.com\/repos\/\$\{GITHUB_REPOSITORY\}\/pulls/)
+  assert.match(
+    workflow,
+    /if: \$\{\{ steps\.check-submodule\.outputs\.changed == 'yes' && steps\.check-submodule\.outputs\.fast-forward == 'yes' && steps\.pr-capability\.outputs\.capability == 'allowed' \}\}/
+  )
+})
+
+test('a pull request creation refused by the repository policy is reported, never a red job', () => {
+  assert.match(workflow, /capability=blocked/)
+  assert.match(workflow, /not permitted to create or approve pull requests/)
+  assert.match(workflow, /GITHUB_STEP_SUMMARY/)
+  assert.doesNotMatch(workflow, /continue-on-error:\s*true/)
+})
+
+test('the pinned Apache James commit is never silently dropped by the updater', () => {
+  assert.match(workflow, /merge-base --is-ancestor/)
+  assert.match(workflow, /fast-forward=no/)
+  assert.match(workflow, /fast-forward=yes/)
+})
