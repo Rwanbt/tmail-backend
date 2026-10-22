@@ -1,4 +1,8 @@
-FROM jenkins/jenkinsfile-runner:adoptopenjdk-11-hotspot
+# The base image is pinned by digest, with the same verified manifest digest as
+# ci/jenkins-runtime.Dockerfile: the tag alone lets the registry serve a
+# different image on the next build, which would make the runner image
+# unreproducible.
+FROM jenkins/jenkinsfile-runner:adoptopenjdk-11-hotspot@sha256:1510739cb658772e733899a56e7ababb44cc113ee7fa22ec915c5fd0e7bff7a2
 
 # Install git, docker
 RUN set -x && \
