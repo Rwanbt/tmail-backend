@@ -15,7 +15,7 @@ residual risk is explicit, dated and owned, not hidden.
 
 Last reviewed: 2026-10-22, Trivy 0.76.1 database.
 
-The scan reports **10 HIGH findings and 0 CRITICAL** on this repository:
+The scan reports **9 HIGH findings and 0 CRITICAL** on this repository:
 
 | Family | Count | Finding |
 |---|---|---|
