@@ -116,7 +116,15 @@
         <james.protocols.groupId>${james.groupId}.protocols</james.protocols.groupId>
         <james.version>3.10.0-SNAPSHOT</james.version>
         <firebase-admin-sdk.version>9.3.0</firebase-admin-sdk.version>
-        <bouncycastle.version>1.82</bouncycastle.version>
+        <!--
+          bouncycastle.version is kept in lockstep with the Apache James parent this
+          tree is built against: the pinned james-project commit already declares 1.85,
+          and bcpg, bcprov, bcutil and bcpkix all share that property. Overriding it to
+          an older release here pinned the whole BouncyCastle family below the upstream
+          version and reintroduced CVE-2026-3505 (unbounded PGP AEAD chunk size,
+          pre-auth resource exhaustion), which is fixed in 1.84.
+        -->
+        <bouncycastle.version>1.85</bouncycastle.version>
         <mongodb.version>5.5.1</mongodb.version>
         <netty.tcnative.version>2.0.77.Final</netty.tcnative.version>
         <scala.base>2.13</scala.base>

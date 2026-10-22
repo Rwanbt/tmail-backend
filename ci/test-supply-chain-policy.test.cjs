@@ -73,7 +73,11 @@ test('the accepted findings are inventoried and justified', () => {
     'utf8'
   )
   assert.match(inventory, /Accepted HIGH findings/)
-  assert.match(inventory, /CVE-2026-3505/)
+  // The BouncyCastle advisory is fixed, so it must no longer be listed as an
+  // accepted finding, but it must stay in the file as the audit trail of the
+  // remediation.
+  assert.match(inventory, /CVE-2026-3505[\s\S]*?RESOLVED/)
+  assert.doesNotMatch(inventory, /\|\s*vulnerabilities\s*\|/)
   assert.match(inventory, /DS-0002/)
   assert.match(inventory, /Remediation path/)
   // The inventory must reach the workflow, otherwise it is a document nobody
@@ -95,7 +99,7 @@ test('the accepted findings are inventoried and justified', () => {
     )
   }
   assert.match(inventory, /5 secrets \(HIGH, rule `private-key`\)/)
-  assert.match(inventory, /13 HIGH findings and 0 CRITICAL/)
+  assert.match(inventory, /10 HIGH findings and 0 CRITICAL/)
 })
 
 test('the bills of materials are published and identified by their digest', () => {

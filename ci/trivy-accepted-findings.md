@@ -15,12 +15,11 @@ residual risk is explicit, dated and owned, not hidden.
 
 Last reviewed: 2026-10-22, Trivy 0.76.1 database.
 
-The scan reports **13 HIGH findings and 0 CRITICAL** on this repository:
+The scan reports **10 HIGH findings and 0 CRITICAL** on this repository:
 
 | Family | Count | Finding |
 |---|---|---|
 | secrets | 5 | `private-key` on the sample key pairs |
-| vulnerabilities | 3 | `CVE-2026-3505` in `org.bouncycastle:bcpg-jdk18on` 1.82 |
 | misconfigurations | 5 | `DS-0002` ×4, `DS-0029` ×1 |
 
 Every one of them is listed below.
@@ -56,21 +55,8 @@ because it changes the behaviour of the published sample stacks.
 The count is asserted by `ci/test-supply-chain-policy.test.cjs`, so a new
 sample key cannot be added without this inventory being updated.
 
-## 2. `CVE-2026-3505` — BouncyCastle `bcpg-jdk18on` 1.82 (HIGH)
 
-> bouncycastle: BC-JAVA: unbounded PGP AEAD chunk size leads to pre-auth
-> resource exhaustion
-
-The version is declared by this repository in `tmail-backend/pom.xml`
-(`<bouncycastle.version>`), so the fork owns it.
-
-**Remediation path.** Bump `<bouncycastle.version>` to 1.84, the first release
-that fixes the advisory, and validate it with the `JMAP / Apache James real
-Maven smoke` workflow. This is a crypto library bump and is therefore tracked
-as its own pull request rather than folded into the scan gate, so it can be
-validated and reverted independently.
-
-## 3. `DS-0002` — "Image user should not be 'root'" (HIGH, 4 files)
+## 2. `DS-0002` — "Image user should not be 'root'" (HIGH, 4 files)
 
 | File | Why root is needed |
 |---|---|
@@ -84,6 +70,19 @@ validated and reverted independently.
 **Remediation path.** Add an explicit non-root `USER` for the runtime phase
 and keep the privileged phase scoped to the package installation, one image at
 a time, each validated by the deployment tests that use it.
+
+## 3. `CVE-2026-3505` — BouncyCastle — RESOLVED
+
+`CVE-2026-3505` (unbounded PGP AEAD chunk size, pre-auth resource exhaustion)
+was reported on `org.bouncycastle:bcpg-jdk18on` 1.82.
+
+**Resolved.** This repository overrode `bouncycastle.version` to 1.82 while the
+Apache James parent it builds against, the pinned `james-project` commit
+`3f6015caf770a81fddef980cc7bc1da33f3176d7`, already declares 1.85. Because
+bcpg, bcprov, bcutil and bcpkix all share that single property, the override
+pinned the whole BouncyCastle family below the upstream version. The property
+is restored to 1.85, the exact version of the upstream commit this repository
+builds against; the advisory is fixed in 1.84.
 
 ## 4. `DS-0029` — "'apt-get' missing '--no-install-recommends'" (HIGH)
 
