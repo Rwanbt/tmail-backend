@@ -40,6 +40,27 @@ class ForkUnitTestsEnumerationTest(unittest.TestCase):
         self.assertNotIn("MemoryEmailGetMethodTest", classes)
         self.assertNotIn("MemoryTeamMailboxSmtpTest", classes)
 
+    def test_excluded_classes_are_declared_with_a_reason(self):
+        excluded = fork_unit_tests.excluded_classes(self.root)
+        self.assertTrue(excluded, "no excluded class was found in the tree")
+        for name, reason in excluded:
+            self.assertIn(name, fork_unit_tests.NON_UNIT_TESTS)
+            self.assertTrue(reason.strip(), f"{name} is excluded without a reason")
+
+    def test_the_only_excluded_class_is_the_container_one(self):
+        excluded = fork_unit_tests.excluded_classes(self.root)
+        self.assertEqual(
+            [name for name, _ in excluded],
+            ["MigrationMirroringTest"],
+            "a new class was excluded from the unit regression job",
+        )
+
+    def test_an_excluded_class_is_not_part_of_the_expected_classes(self):
+        excluded = {name for name, _ in fork_unit_tests.excluded_classes(self.root)}
+        classes = fork_unit_tests.enumerate_classes(self.root)
+        for name in excluded:
+            self.assertIn(name, classes)
+
 
 class ForkUnitTestsVerificationTest(unittest.TestCase):
     def _report(self, directory: Path, suite: str, executed: int, skipped: int):

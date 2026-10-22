@@ -36,11 +36,19 @@ jobs:
           set -euo pipefail
           python3 -m unittest discover -s ci -p 'test_fork_unit_tests.py'
           python3 ci/fork_unit_tests.py list > "$RUNNER_TEMP/fork-unit-tests.env"
-          cat "$RUNNER_TEMP/fork-unit-tests.env" >> "$GITHUB_ENV"
+          # $GITHUB_ENV only reaches the following steps, so this step reads
+          # its own values back from the file for its own reporting.
+          grep -E '^(MODULES|CLASSES)=' "$RUNNER_TEMP/fork-unit-tests.env" >> "$GITHUB_ENV"
+          modules="$(sed -n 's/^MODULES=//p' "$RUNNER_TEMP/fork-unit-tests.env")"
           sed -n 's/^CLASSES=//p' "$RUNNER_TEMP/fork-unit-tests.env" | tr ',' '\n' \
             > "$RUNNER_TEMP/expected-unit-classes.txt"
-          echo "Fork unit test modules: $(echo "$MODULES" | tr ',' '\n' | wc -l)"
+          echo "Fork unit test modules: $(echo "$modules" | tr ',' '\n' | wc -l)"
           echo "Fork unit test classes: $(wc -l < "$RUNNER_TEMP/expected-unit-classes.txt")"
+          if grep -q '^EXCLUDED=' "$RUNNER_TEMP/fork-unit-tests.env"; then
+            echo ""
+            echo "Classes excluded from the unit regression job, with their reason:"
+            sed -n 's/^EXCLUDED=/  - /p' "$RUNNER_TEMP/fork-unit-tests.env"
+          fi
       - name: Execute the unit tests the fork owns
         timeout-minutes: 80
         shell: bash
@@ -63,6 +71,13 @@ jobs:
           python3 ci/fork_unit_tests.py verify \
             --reports tmail-backend \
             --expected "$RUNNER_TEMP/expected-unit-classes.txt"
+          if grep -q '^EXCLUDED=' "$RUNNER_TEMP/fork-unit-tests.env"; then
+            {
+              echo ""
+              echo "Classes excluded from the unit regression job, with their reason:"
+              sed -n 's/^EXCLUDED=/  - /p' "$RUNNER_TEMP/fork-unit-tests.env"
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
       - name: Publish the unit test reports
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

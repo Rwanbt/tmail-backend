@@ -41,6 +41,20 @@ TEST_FILE = re.compile(r"(Test|Tests|Spec)\.(java|scala)$")
 ABSTRACT_CLASS = re.compile(r"\babstract\s+(?:final\s+)?class\b")
 MODULE_POM = "pom.xml"
 
+# Classes that live under src/test but are not unit tests: they need a
+# container image or a running backend, so they cannot run in the unit
+# regression job. They are excluded with their reason, the exclusion is
+# reported in the job summary, and the contract test asserts that this list
+# stays exactly as declared: nothing can be silently dropped.
+NON_UNIT_TESTS = {
+    "MigrationMirroringTest": (
+        "starts the previous backend from the Jib built image tar "
+        "(tmail-backend/apps/memory/target/jib-image.tar) and needs a Docker "
+        "daemon; it is a container integration test, exercised by the "
+        "Apache James Jenkins pipeline"
+    ),
+}
+
 
 def _read(path: Path) -> str:
     try:
@@ -91,13 +105,25 @@ def enumerate_classes(root: Path) -> list[str]:
         relative = module.relative_to(root).as_posix()
         if any(relative.startswith(prefix) for prefix in INTEGRATION_PREFIXES):
             continue
-        for candidate in module.rglob("*Test.java"):
+        for candidate in list(module.rglob("*Test.java")) + list(
+            module.rglob("*Test.scala")
+        ):
             if not TEST_FILE.search(candidate.name):
                 continue
             if ABSTRACT_CLASS.search(_read(candidate)):
                 continue
             names.add(candidate.stem)
     return sorted(names)
+
+
+def excluded_classes(root: Path) -> list[tuple[str, str]]:
+    """The declared non unit test classes that are present in the tree."""
+    present = set(enumerate_classes(root))
+    return [
+        (name, reason)
+        for name, reason in sorted(NON_UNIT_TESTS.items())
+        if name in present
+    ]
 
 
 def collect_reports(reports_root: Path) -> dict[str, tuple[int, int]]:
@@ -124,30 +150,76 @@ def collect_reports(reports_root: Path) -> dict[str, tuple[int, int]]:
     return collected
 
 
-def verify(reports_root: Path, expected: list[str]) -> list[str]:
+def class_modules(root: Path) -> dict[str, str]:
+    """Map each unit test class to the module directory that owns it."""
+    owners: dict[str, str] = {}
+    for module in root.glob(f"{FORK_ROOT}/**/src/test"):
+        relative = module.relative_to(root).as_posix()
+        if any(relative.startswith(prefix) for prefix in INTEGRATION_PREFIXES):
+            continue
+        for candidate in list(module.rglob("*Test.java")) + list(
+            module.rglob("*Test.scala")
+        ):
+            if not TEST_FILE.search(candidate.name):
+                continue
+            owners.setdefault(candidate.stem, relative[: -len("/src/test")])
+    return owners
+
+
+def per_module(
+    owners: dict[str, str], expected: list[str], collected: dict[str, tuple[int, int]]
+) -> list[str]:
+    """Per module, the expected class count against the count with a report."""
+    counters: dict[str, list[int]] = {}
+    for name in expected:
+        module = owners.get(name, "unknown module")
+        entry = counters.setdefault(module, [0, 0])
+        entry[0] += 1
+        if name in collected:
+            entry[1] += 1
+    return [
+        f"{module}: {expected_count} expected, {reported_count} with a report"
+        for module, (expected_count, reported_count) in counters.items()
+        if expected_count != reported_count
+    ]
+
+
+def verify(
+    reports_root: Path, expected: list[str], owners: dict[str, str] | None = None
+) -> list[str]:
     """Prove every expected class executed at least one non-skipped test case."""
     if not expected:
         raise ValueError("No expected unit test class was found in the source tree")
     collected = collect_reports(reports_root)
+    owners = owners or {}
+
+    def describe(name: str) -> str:
+        module = owners.get(name)
+        return f"{name} ({module})" if module else name
+
     missing: list[str] = []
     empty: list[str] = []
     for name in expected:
         executed, skipped = collected.get(name, (0, 0))
         if name not in collected:
-            missing.append(name)
+            missing.append(describe(name))
         elif executed == 0:
-            empty.append(name)
+            empty.append(describe(name))
     if missing:
         raise ValueError(
             "These unit test classes produced no Surefire report: "
             + ", ".join(sorted(missing)[:20])
             + (" ..." if len(missing) > 20 else "")
+            + "; per module, expected classes versus classes with a report: "
+            + "; ".join(sorted(per_module(owners, expected, collected)))
         )
     if empty:
         raise ValueError(
             "These unit test classes executed no test case (all skipped): "
             + ", ".join(sorted(empty)[:20])
             + (" ..." if len(empty) > 20 else "")
+            + "; per module, expected classes versus classes with a report: "
+            + "; ".join(sorted(per_module(owners, expected, collected)))
         )
     total_executed = sum(collected[name][0] for name in expected)
     total_skipped = sum(collected[name][1] for name in expected)
@@ -169,11 +241,16 @@ def main() -> int:
     if args.command == "list":
         modules = enumerate_modules(root)
         classes = enumerate_classes(root)
+        excluded = excluded_classes(root)
+        excluded_names = {name for name, _ in excluded}
+        classes = [name for name in classes if name not in excluded_names]
         if not modules or not classes:
             print("No fork unit test module was found", file=sys.stderr)
             return 1
         print("MODULES=" + ",".join(modules))
         print("CLASSES=" + ",".join(classes))
+        for name, reason in excluded:
+            print(f"EXCLUDED={name}: {reason}")
         return 0
 
     if not args.reports or not args.expected:
@@ -181,7 +258,8 @@ def main() -> int:
         return 2
     expected = [line.strip() for line in args.expected.read_text(encoding="utf-8").splitlines() if line.strip()]
     try:
-        for summary in verify(args.reports.resolve(), expected):
+        owners = class_modules(root)
+        for summary in verify(args.reports.resolve(), expected, owners):
             print(summary)
     except (ValueError, ET.ParseError, OSError) as error:
         print(f"Fork unit test verification FAILED: {error}", file=sys.stderr)
