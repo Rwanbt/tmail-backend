@@ -44,6 +44,7 @@ jobs:
           python3 -m unittest discover -s ci -p 'test_check_maven_dependencies.py'
           python3 ci/check_maven_dependencies.py tmail-backend
           python3 -m unittest discover -s ci -p 'test_verify_jmap_surefire.py'
+          python3 -m unittest discover -s ci -p 'test_verify_james_ssrf_surefire.py'
       - name: Execute real in-memory JMAP email, mailbox, ACL, auth, send and blob suites
         timeout-minutes: 50
         shell: bash
@@ -51,7 +52,7 @@ jobs:
           set -euo pipefail
           mvn -B -ntp \
             -pl :memory-jmap-integration-tests,:jmap-extensions -am \
-            -Dtest=MemoryEmailGetMethodTest,MemoryEmailSetMethodTest,MemoryEmailSubmissionSetMethodTest,MemoryMailboxSetMethodTest,MemoryWebPushDisabledTest,MemoryWebSocketTransportDisabledTest,MemoryWebSocketTransportEnabledTest,MemoryTeamMailboxMemberSetMethodTest,MemoryTicketAuthenticationTest,MemoryUnauthenticatedBlobAccessSetMethodTest,MemoryLinagoraEmailSendMethodTest,MemoryUploadFromUrlTest,EmailSendQueueCleanupTest,EmailSendFailureSanitizationTest,EmailSendPrepublicationFailureTest,EmailSendIdempotencyTest,EmailSendOutboxStateTest \
+            -Dtest=MemoryEmailGetMethodTest,MemoryEmailSetMethodTest,MemoryEmailSubmissionSetMethodTest,MemoryMailboxSetMethodTest,MemoryWebPushDisabledTest,MemoryWebSocketTransportDisabledTest,MemoryWebSocketTransportEnabledTest,MemoryTeamMailboxMemberSetMethodTest,MemoryTicketAuthenticationTest,MemoryUnauthenticatedBlobAccessSetMethodTest,MemoryLinagoraEmailSendMethodTest,MemoryUploadFromUrlTest,EmailSendQueueCleanupTest,EmailSendFailureSanitizationTest,EmailSendPrepublicationFailureTest,EmailSendIdempotencyTest,EmailSendOutboxStateTest,SsrfRemoteUrlValidatorTest,SSRFValidatorTest,AllowedRemoteSourceTest,RemoteUrlPolicyTest,UploadFromUrlConfigurationTest,BoundedRemoteContentDecompressorTest,RemoteUrlForLoggingTest,UploadFromUrlCapabilityTest,TicketManagerTest \
             -Dsurefire.failIfNoSpecifiedTests=false \
             test
       - name: Confirm JMAP test methods genuinely executed
@@ -140,6 +141,46 @@ jobs:
             --require com.linagora.tmail.james.jmap.model.EmailSendOutboxStateTest:onlyOwnerMayAcknowledgeOrMarkUncertain \
             --require com.linagora.tmail.james.jmap.model.EmailSendOutboxStateTest:restartAndLostAcknowledgementNeverAuthorizeResend \
             --require com.linagora.tmail.james.jmap.model.EmailSendOutboxStateTest:provenRejectionCannotBeInferredOnceDispatchStarted
+      - name: Require the SSRF address policy to be executed, not assumed
+        shell: bash
+        run: |
+          # The production SSRF entry point: private IPv4/IPv6 ranges, the IPv6
+          # cloud metadata endpoint, IPv4-mapped IPv6 and the alternative IPv4
+          # notations are refused by the real resolver.
+          python3 ci/verify_jmap_surefire.py \
+            tmail-backend/jmap/extensions/target/surefire-reports \
+            com.linagora.tmail.james.jmap.upload.SsrfRemoteUrlValidatorTest \
+            --require com.linagora.tmail.james.jmap.upload.SsrfRemoteUrlValidatorTest:shouldRejectEveryAddressReachingTheLocalNetwork \
+            --require com.linagora.tmail.james.jmap.upload.SsrfRemoteUrlValidatorTest:shouldAcceptAPublicAddress
+          # The upload-from-URL policy, the log redaction and the JMAP ticket
+          # lifecycle suites exist in the production module but are not
+          # selected by any other gate: they must be executed, not assumed.
+          python3 ci/verify_jmap_surefire.py \
+            tmail-backend/jmap/extensions/target/surefire-reports \
+            com.linagora.tmail.james.jmap.upload.AllowedRemoteSourceTest \
+            com.linagora.tmail.james.jmap.upload.RemoteUrlPolicyTest \
+            com.linagora.tmail.james.jmap.upload.UploadFromUrlConfigurationTest \
+            com.linagora.tmail.james.jmap.upload.BoundedRemoteContentDecompressorTest \
+            com.linagora.tmail.james.jmap.upload.RemoteUrlForLoggingTest \
+            com.linagora.tmail.james.jmap.method.UploadFromUrlCapabilityTest \
+            com.linagora.tmail.james.jmap.ticket.TicketManagerTest \
+            --require com.linagora.tmail.james.jmap.upload.AllowedRemoteSourceTest:shouldRejectPercentEncodingInConfiguredHost \
+            --require com.linagora.tmail.james.jmap.upload.AllowedRemoteSourceTest:shouldRejectUserInfoInConfiguredSource \
+            --require com.linagora.tmail.james.jmap.upload.RemoteUrlPolicyTest:shouldSelectSsrfModeWithoutSources \
+            --require com.linagora.tmail.james.jmap.upload.RemoteUrlPolicyTest:shouldRejectNonStandardPortInSsrfMode \
+            --require com.linagora.tmail.james.jmap.upload.UploadFromUrlConfigurationTest:shouldBeDisabledByDefault \
+            --require com.linagora.tmail.james.jmap.upload.UploadFromUrlConfigurationTest:shouldRejectTrustAllSourceSslCertificatesWithoutAllowedSources \
+            --require com.linagora.tmail.james.jmap.upload.BoundedRemoteContentDecompressorTest:shouldCapMaximumAllocationToIntegerRange \
+            --require com.linagora.tmail.james.jmap.upload.RemoteUrlForLoggingTest:shouldRemoveCredentialsAndFragment \
+            --require com.linagora.tmail.james.jmap.method.UploadFromUrlCapabilityTest:shouldOmitAllowedSourcesWhenUsingDynamicSsrfPolicy \
+            --require com.linagora.tmail.james.jmap.ticket.TicketManagerTest:ticketShouldBeScopedBySourceIpByDefault \
+            --require com.linagora.tmail.james.jmap.ticket.TicketManagerTest:ticketShouldExpire \
+            --require com.linagora.tmail.james.jmap.ticket.TicketManagerTest:ticketCanBeRevoked \
+            --require com.linagora.tmail.james.jmap.ticket.TicketManagerTest:ticketShouldBeSingleUse
+          # The pinned Apache James policy suite: DNS rebinding, multi record
+          # resolution and IPv4-mapped IPv6 held as an IPv6 address.
+          python3 ci/verify_james_ssrf_surefire.py \
+            james-project/server/protocols/jmap-rfc-8621/target/surefire-reports
       - name: Preserve real Maven test evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
