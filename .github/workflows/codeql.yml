@@ -37,6 +37,6 @@ jobs:
       - name: Build
         run: |
           set -euo pipefail
-          mvn -B -ntp -DskipTests -Dcheckstyle.skip=true -Dspotbugs.skip=true compile
+          mvn -B -ntp -DskipTests -Dcheckstyle.skip=true -Dspotbugs.skip=true install
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v3
