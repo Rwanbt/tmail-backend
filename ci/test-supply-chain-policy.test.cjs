@@ -56,6 +56,9 @@ test('the bills of materials are published and identified by their digest', () =
   assert.match(workflow, /format:\s*spdx-json/)
   assert.match(workflow, /sha256sum/)
   assert.match(workflow, /GITHUB_STEP_SUMMARY/)
+  // A missing bill of materials must fail the publication instead of
+  // producing an empty artifact.
+  assert.match(workflow, /if-no-files-found:\s*error/)
 })
 
 test('the bill of materials carries an attested provenance', () => {
@@ -63,6 +66,11 @@ test('the bill of materials carries an attested provenance', () => {
   assert.match(workflow, /attestations:\s*write/)
   assert.match(workflow, /id-token:\s*write/)
   assert.match(workflow, /subject-path:\s*attest\/sbom\.cdx\.json/)
+  // The published artifact must contain the file the attestation points at.
+  assert.match(
+    workflow,
+    /name:\s*sbom-cyclonedx\s*\r?\n\s*path:\s*sbom\.cdx\.json/
+  )
 })
 
 test('every tracked container image is pinned by digest', () => {
