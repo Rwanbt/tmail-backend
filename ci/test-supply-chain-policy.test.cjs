@@ -73,13 +73,29 @@ test('the accepted findings are inventoried and justified', () => {
     'utf8'
   )
   assert.match(inventory, /Accepted HIGH findings/)
-  assert.match(inventory, /jwt_privatekey/)
   assert.match(inventory, /CVE-2026-3505/)
   assert.match(inventory, /DS-0002/)
   assert.match(inventory, /Remediation path/)
-  // The inventory must be reachable from the workflow, otherwise it is a
-  // document nobody reads when the scan fails.
+  // The inventory must reach the workflow, otherwise it is a document nobody
+  // reads when the scan fails.
   assert.match(workflow, /ci\/trivy-accepted-findings\.md/)
+  // Every accepted sample key must be listed, with its count. A new sample key
+  // committed without being inventoried would otherwise pass unnoticed.
+  const sampleKeys = [
+    'demo/lemonldap/lmConf-1.json',
+    'demo/tmail/jwt_privatekey',
+    'tmail-backend/plugins/mail-reporting/sample_conf/jwt_privatekey',
+    'tmail-backend/tmail-third-party/ai-bot/sample_conf/jwt_privatekey',
+    'tmail-backend/tmail-third-party/openpaas/sample_conf/jwt_privatekey',
+  ]
+  for (const key of sampleKeys) {
+    assert.ok(
+      inventory.includes(key),
+      `accepted sample key is not inventoried: ${key}`
+    )
+  }
+  assert.match(inventory, /5 secrets \(HIGH, rule `private-key`\)/)
+  assert.match(inventory, /13 HIGH findings and 0 CRITICAL/)
 })
 
 test('the bills of materials are published and identified by their digest', () => {

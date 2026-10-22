@@ -15,10 +15,22 @@ residual risk is explicit, dated and owned, not hidden.
 
 Last reviewed: 2026-10-22, Trivy 0.76.1 database.
 
-## 1. Sample RSA key pairs — 3 secrets (HIGH, rule `private-key`)
+The scan reports **13 HIGH findings and 0 CRITICAL** on this repository:
+
+| Family | Count | Finding |
+|---|---|---|
+| secrets | 5 | `private-key` on the sample key pairs |
+| vulnerabilities | 3 | `CVE-2026-3505` in `org.bouncycastle:bcpg-jdk18on` 1.82 |
+| misconfigurations | 5 | `DS-0002` ×4, `DS-0029` ×1 |
+
+Every one of them is listed below.
+
+## 1. Sample RSA key pairs — 5 secrets (HIGH, rule `private-key`)
 
 | File | Component |
 |---|---|
+| `demo/lemonldap/lmConf-1.json` | local demo stack, LemonLDAP configuration |
+| `demo/tmail/jwt_privatekey` | local demo stack, TMail JWT signing key |
 | `tmail-backend/plugins/mail-reporting/sample_conf/jwt_privatekey` | mail-reporting plugin sample configuration |
 | `tmail-backend/tmail-third-party/ai-bot/sample_conf/jwt_privatekey` | ai-bot third-party sample configuration |
 | `tmail-backend/tmail-third-party/openpaas/sample_conf/jwt_privatekey` | openpaas third-party sample configuration |
@@ -40,6 +52,9 @@ third-party integrations. They are not production credentials:
 **Remediation path.** Generate the sample key pair on first use instead of
 committing it, so the repository never carries key material. Not done here
 because it changes the behaviour of the published sample stacks.
+
+The count is asserted by `ci/test-supply-chain-policy.test.cjs`, so a new
+sample key cannot be added without this inventory being updated.
 
 ## 2. `CVE-2026-3505` — BouncyCastle `bcpg-jdk18on` 1.82 (HIGH)
 
