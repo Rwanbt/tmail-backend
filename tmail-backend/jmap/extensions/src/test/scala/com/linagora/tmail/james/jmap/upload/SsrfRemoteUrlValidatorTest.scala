@@ -63,9 +63,18 @@ class SsrfRemoteUrlValidatorTest {
     "http://[fe80::1]/",
     // IPv4-mapped IPv6: the traffic ends up on the embedded IPv4 address
     "http://[::ffff:127.0.0.1]/",
-    // Alternative IPv4 notations resolved by the JDK to 127.0.0.1
+    // Alternative IPv4 notations. The resolutions below are the ones the JDK
+    // really performs (verified with InetAddress.getAllByName):
+    //   2130706433 -> 127.0.0.1        (decimal single part)
+    //   0177       -> 0.0.0.177        (octal single part, this-network range)
+    //   127.1      -> 127.0.0.1        (short dotted form)
+    // A dotted leading zero is NOT octal for the JDK: 0177.0.0.1 resolves to
+    // the public 177.0.0.1 and is therefore legitimately not refused.
     "http://2130706433/",
-    "http://0177.0.0.1/",
+    "http://0177/",
+    "http://127.1/",
+    // A hexadecimal literal is not a resolvable name for the JDK: such a host
+    // is refused instead of being connected to.
     "http://0x7f000001/"
   ))
   def shouldRejectEveryAddressReachingTheLocalNetwork(url: String): Unit = {
