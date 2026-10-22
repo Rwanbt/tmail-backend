@@ -58,6 +58,7 @@ class ForkUnitTestsEnumerationTest(unittest.TestCase):
                 "RabbitMQAndRedisEventBusWithKvrocksTest",
                 "RabbitMQAndRedisEventBusWithPartitioningTest",
                 "RabbitMQAndRedisEventBusWithRedisSentinelTest",
+                "RedisClusterUnauthenticatedBlobDownloadTokenRepositoryTest",
             ],
             "a new class was excluded from the unit regression job",
         )

@@ -84,6 +84,11 @@ NON_UNIT_TESTS = {
         "(Testcontainers) and the same invalid-payload dead-letter path; "
         "covered by the distributed contract workflows"
     ),
+    "RedisClusterUnauthenticatedBlobDownloadTokenRepositoryTest": (
+        "exercises a live Redis cluster through Testcontainers; the cluster "
+        "is not available in the unit regression runner (CLUSTERDOWN), so "
+        "the test cannot pass there; covered by the Redis integration suites"
+    ),
 }
 
 
