@@ -38,7 +38,15 @@ INTEGRATION_PREFIXES = (
 )
 
 TEST_FILE = re.compile(r"(Test|Tests|Spec)\.(java|scala)$")
-ABSTRACT_CLASS = re.compile(r"\babstract\s+(?:final\s+)?class\b")
+TEST_CLASS_NAME = re.compile(r"(?:Test|Tests|Spec)$")
+JAVA_CLASS = re.compile(
+    r"(?m)^\s*((?:(?:public|protected|private|static|final|abstract|sealed)\s+)*)"
+    r"class\s+([A-Za-z_$][\w$]*)"
+)
+SCALA_CLASS = re.compile(
+    r"(?m)^\s*((?:(?:abstract|final|sealed|private|protected)\s+)*)"
+    r"class\s+([A-Za-z_$][\w$]*)"
+)
 MODULE_POM = "pom.xml"
 
 # Classes that live under src/test but are not unit tests: they need a
@@ -116,6 +124,26 @@ def _module_selector(pom: Path) -> str | None:
     return f":{artifact.text.strip()}"
 
 
+def _test_class_names(candidate: Path) -> list[str]:
+    """Return concrete test classes declared in a conventionally named file.
+
+    Java's public test class normally matches the file name, but Scala files
+    may define multiple concrete suites whose names differ from the file. An
+    empty `*Test.java` placeholder is not a test class and must not become an
+    expected Surefire report.
+    """
+    if not TEST_FILE.search(candidate.name):
+        return []
+    source = _read(candidate)
+    declaration = JAVA_CLASS if candidate.suffix == ".java" else SCALA_CLASS
+    result = []
+    for match in declaration.finditer(source):
+        modifiers, name = match.groups()
+        if TEST_CLASS_NAME.search(name) and "abstract" not in modifiers.split():
+            result.append(name)
+    return result
+
+
 def enumerate_modules(root: Path) -> list[str]:
     """Maven selectors of the fork modules that own unit tests."""
     selectors: set[str] = set()
@@ -126,7 +154,11 @@ def enumerate_modules(root: Path) -> list[str]:
         test_dir = pom.parent / "src" / "test"
         if not test_dir.is_dir():
             continue
-        if not any(test_dir.rglob("*Test.java")):
+        if not any(
+            _test_class_names(candidate)
+            for pattern in ("*.java", "*.scala")
+            for candidate in test_dir.rglob(pattern)
+        ):
             continue
         selector = _module_selector(pom)
         if selector:
@@ -141,14 +173,9 @@ def enumerate_classes(root: Path) -> list[str]:
         relative = module.relative_to(root).as_posix()
         if any(relative.startswith(prefix) for prefix in INTEGRATION_PREFIXES):
             continue
-        for candidate in list(module.rglob("*Test.java")) + list(
-            module.rglob("*Test.scala")
-        ):
-            if not TEST_FILE.search(candidate.name):
-                continue
-            if ABSTRACT_CLASS.search(_read(candidate)):
-                continue
-            names.add(candidate.stem)
+        for pattern in ("*.java", "*.scala"):
+            for candidate in module.rglob(pattern):
+                names.update(_test_class_names(candidate))
     return sorted(names)
 
 
@@ -193,12 +220,10 @@ def class_modules(root: Path) -> dict[str, str]:
         relative = module.relative_to(root).as_posix()
         if any(relative.startswith(prefix) for prefix in INTEGRATION_PREFIXES):
             continue
-        for candidate in list(module.rglob("*Test.java")) + list(
-            module.rglob("*Test.scala")
-        ):
-            if not TEST_FILE.search(candidate.name):
-                continue
-            owners.setdefault(candidate.stem, relative[: -len("/src/test")])
+        for pattern in ("*.java", "*.scala"):
+            for candidate in module.rglob(pattern):
+                for name in _test_class_names(candidate):
+                    owners.setdefault(name, relative[: -len("/src/test")])
     return owners
 
 

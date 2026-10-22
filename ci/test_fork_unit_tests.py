@@ -40,6 +40,48 @@ class ForkUnitTestsEnumerationTest(unittest.TestCase):
         self.assertNotIn("MemoryEmailGetMethodTest", classes)
         self.assertNotIn("MemoryTeamMailboxSmtpTest", classes)
 
+    def test_enumerate_classes_uses_declared_scala_classes_and_ignores_empty_java(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            module = root / "tmail-backend" / "example"
+            tests = module / "src" / "test"
+            scala = tests / "scala" / "example" / "RespondDetailsTest.scala"
+            java = tests / "java" / "example" / "EmptyPlaceholderTest.java"
+            scala.parent.mkdir(parents=True)
+            java.parent.mkdir(parents=True)
+            (module / "pom.xml").write_text(
+                "<project><artifactId>example</artifactId></project>",
+                encoding="utf-8",
+            )
+            scala.write_text(
+                """package example
+trait RespondDetailsContract
+class DownloadAllRespondDetailsTest extends RespondDetailsContract
+class UnauthenticatedBlobAccessRespondDetailsTest extends RespondDetailsContract
+""",
+                encoding="utf-8",
+            )
+            java.write_text("// reserved placeholder; no test class yet\n", encoding="utf-8")
+
+            self.assertEqual(
+                fork_unit_tests.enumerate_classes(root),
+                [
+                    "DownloadAllRespondDetailsTest",
+                    "UnauthenticatedBlobAccessRespondDetailsTest",
+                ],
+            )
+            self.assertEqual(fork_unit_tests.enumerate_modules(root), [":example"])
+
+    def test_real_scala_serializer_suite_is_enumerated(self):
+        classes = fork_unit_tests.enumerate_classes(self.root)
+        self.assertIn("AiBotSerializerTest", classes)
+        self.assertIn("DownloadAllRespondDetailsTest", classes)
+        self.assertIn("UnauthenticatedBlobAccessRespondDetailsTest", classes)
+        self.assertNotIn("RespondDetailsTest", classes)
+        self.assertNotIn("DeleteEncryptedProjectionHookTest", classes)
+
     def test_excluded_classes_are_declared_with_a_reason(self):
         excluded = fork_unit_tests.excluded_classes(self.root)
         self.assertTrue(excluded, "no excluded class was found in the tree")
