@@ -1,20 +1,26 @@
-name: Create PR to update James submodule
+name: Report pending Apache James submodule update
 
 on:
   schedule:
     - cron: '1 */4 * * *'
   workflow_dispatch:
 
-# Updating the gitlink and opening a review PR are the only write effects.
+# Read-only by design.
+#
+# Updating the Apache James submodule and opening the pull request that carries
+# that update are MANUAL operations owned by the maintainer, performed outside
+# CI. This workflow therefore only REPORTS the drift between the pinned gitlink
+# and the remote head.
+#
+# It must never open a pull request, never push a branch and never grant the
+# workflow token a pull-request scope. The file name is kept for continuity
+# with the existing schedule; the previous automatic pull request behaviour was
+# removed on purpose.
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
 
 jobs:
-  createPullRequest:
-    # A workflow_dispatch can target arbitrary refs; never open a privileged
-    # update PR from an unreviewed feature branch instead of default master.
-    if: github.ref == 'refs/heads/master'
+  reportPendingSubmoduleUpdate:
     runs-on: ubuntu-latest
 
     steps:
@@ -23,21 +29,19 @@ jobs:
           submodules: recursive
           persist-credentials: false
           ref: ${{ github.sha }}
-      - name: Check if submodule is updated
+      - name: Compare the pinned Apache James commit with the remote head
         id: check-submodule
         run: |
           # The checked-out source stays at the exact workflow trigger SHA.
-          # This workflow proposes a new Apache James gitlink; it never rebases
-          # or silently executes a newer TMail checkout than the reviewed one.
+          # This workflow only REPORTS the drift; it never rebases or silently
+          # executes a newer TMail checkout than the reviewed one.
           pinned=$(git ls-tree HEAD james-project | awk '{print $3}')
           git submodule update --remote james-project
-          git config user.name 'github[bot]'
-          git config user.email 'github-bot@linagora.com'
           remote_head=$(git -C james-project rev-parse HEAD)
           echo "pinned=${pinned}" >> "$GITHUB_OUTPUT"
           echo "remote-head=${remote_head}" >> "$GITHUB_OUTPUT"
           if [ "${pinned}" = "${remote_head}" ]; then
-            echo "No changes in submodule"
+            echo "The pinned Apache James commit is up to date."
             echo "changed=no" >> "$GITHUB_OUTPUT"
             echo "fast-forward=yes" >> "$GITHUB_OUTPUT"
           else
@@ -48,104 +52,32 @@ jobs:
             if git -C james-project fetch --depth=200 origin master; then
               echo "Apache James history deepened to check the pinned ancestry"
             else
-              echo "::warning::Cannot deepen the Apache James history; no update will be proposed."
+              echo "::warning::Cannot deepen the Apache James history; the ancestry cannot be proven."
             fi
             if git -C james-project merge-base --is-ancestor "${pinned}" "${remote_head}"; then
-              echo "Submodule has changes"
-              git add james-project
+              echo "An Apache James update is available and descends from the pinned commit."
               echo "changed=yes" >> "$GITHUB_OUTPUT"
               echo "fast-forward=yes" >> "$GITHUB_OUTPUT"
             else
-              echo "Submodule remote head is not a descendant of the pinned commit"
+              echo "The Apache James remote head does not descend from the pinned commit."
               echo "changed=yes" >> "$GITHUB_OUTPUT"
               echo "fast-forward=no" >> "$GITHUB_OUTPUT"
             fi
           fi
-      - name: Detect whether this workflow may open pull requests
-        id: pr-capability
-        if: ${{ steps.check-submodule.outputs.changed == 'yes' }}
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          # Side-effect free capability probe: a pull request created with an
-          # empty title is always rejected by the API, so this POST never
-          # opens a pull request. GitHub answers 422 when the token may
-          # create pull requests, and 403 when the repository policy
-          # ("Allow GitHub Actions to create and approve pull requests")
-          # forbids it. A forbidden creation is a repository configuration,
-          # not a defect: it is reported and the job succeeds.
-          set +e
-          http_code=$(curl --silent --show-error \
-            --output "$RUNNER_TEMP/pr-capability.json" \
-            --write-out '%{http_code}' \
-            --request POST \
-            --header "Authorization: Bearer ${GH_TOKEN}" \
-            --header 'Accept: application/vnd.github+json' \
-            --header 'X-GitHub-Api-Version: 2022-11-28' \
-            --data '{"title":"","body":""}' \
-            "https://api.github.com/repos/${GITHUB_REPOSITORY}/pulls")
-          set -e
-          message=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("message", ""))' \
-            "$RUNNER_TEMP/pr-capability.json" 2>/dev/null || echo '')
-          echo "probe-http=${http_code}" >> "$GITHUB_OUTPUT"
-          echo "probe-message=${message}" >> "$GITHUB_OUTPUT"
-          case "${http_code}" in
-            422)
-              echo "capability=allowed" >> "$GITHUB_OUTPUT"
-              ;;
-            403)
-              if printf '%s' "${message}" | grep -qi 'not permitted to create or approve pull requests'; then
-                echo "capability=blocked" >> "$GITHUB_OUTPUT"
-              else
-                echo "::error::Pull request creation was refused for another reason: ${message}"
-                exit 1
-              fi
-              ;;
-            *)
-              echo "::error::Unexpected pull request capability probe result: HTTP ${http_code} (${message})"
-              exit 1
-              ;;
-          esac
-      - name: Create Pull Request to Upstream if submodule updated
-        if: ${{ steps.check-submodule.outputs.changed == 'yes' && steps.check-submodule.outputs.fast-forward == 'yes' && steps.pr-capability.outputs.capability == 'allowed' }}
-        uses: peter-evans/create-pull-request@22a9089034f40e5a961c8808d113e2c98fb63676 # v7
-        with:
-          commit-message: Update James SHA-1
-          title: "Update James submodule to latest version"
-          body: |
-            This pull request updates the James SHA-1 submodule to the latest version.
-          branch: upgradeSha1
-          base: master
-          labels: bot
-          delete-branch: true
       - name: Report the pending Apache James update
-        if: ${{ steps.check-submodule.outputs.changed == 'yes' && (steps.check-submodule.outputs.fast-forward != 'yes' || steps.pr-capability.outputs.capability != 'allowed') }}
         env:
           PINNED: ${{ steps.check-submodule.outputs.pinned }}
           REMOTE_HEAD: ${{ steps.check-submodule.outputs.remote-head }}
-          CAPABILITY: ${{ steps.pr-capability.outputs.capability }}
-          PROBE_MESSAGE: ${{ steps.pr-capability.outputs.probe-message }}
+          FAST_FORWARD: ${{ steps.check-submodule.outputs.fast-forward }}
         run: |
+          MANUAL_NOTICE="The Apache James submodule update and its pull request are managed manually by the maintainer; this workflow never opens a pull request."
           {
             echo "## Apache James submodule update pending"
             echo ""
             echo "- pinned commit: \`${PINNED}\`"
             echo "- remote head: \`${REMOTE_HEAD}\`"
+            echo "- descends from the pinned commit: ${FAST_FORWARD}"
             echo ""
-            if [ "${CAPABILITY}" != "allowed" ]; then
-              echo "No pull request was opened: this repository forbids pull request"
-              echo "creation by GitHub Actions (\"Allow GitHub Actions to create and"
-              echo "approve pull requests\" is disabled). API answer: ${PROBE_MESSAGE}"
-              echo ""
-              echo "Enable that repository setting, or open the gitlink update manually."
-              echo ""
-            fi
-            if [ "${CAPABILITY}" = "allowed" ]; then
-              echo "No pull request was opened: the remote head is not a descendant of"
-              echo "the pinned commit, and the pinned commit carries a validated"
-              echo "RabbitMQ publisher-acknowledgement loss fix that a diverged head"
-              echo "would drop. Merge the pinned commit into the fork branch first."
-              echo ""
-            fi
+            echo "${MANUAL_NOTICE}"
           } >> "$GITHUB_STEP_SUMMARY"
-          echo "::notice title=Apache James submodule update pending::pinned=${PINNED} remote-head=${REMOTE_HEAD} capability=${CAPABILITY} - see the job summary"
+          echo "::notice title=Apache James submodule update pending::pinned=${PINNED} remote-head=${REMOTE_HEAD} fast-forward=${FAST_FORWARD} - the update and its pull request are managed manually by the maintainer"
