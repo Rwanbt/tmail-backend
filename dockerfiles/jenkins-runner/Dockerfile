@@ -1,9 +1,13 @@
-FROM jenkins/jenkinsfile-runner:adoptopenjdk-11-hotspot
+# The base image is pinned by digest, with the same verified manifest digest as
+# ci/jenkins-runtime.Dockerfile: the tag alone lets the registry serve a
+# different image on the next build, which would make the runner image
+# unreproducible.
+FROM jenkins/jenkinsfile-runner:adoptopenjdk-11-hotspot@sha256:1510739cb658772e733899a56e7ababb44cc113ee7fa22ec915c5fd0e7bff7a2
 
 # Install git, docker
 RUN set -x && \
   apt-get update && \
-  apt-get install -y wget git unzip apt-transport-https ca-certificates curl gnupg2 software-properties-common && \
+  apt-get install -y --no-install-recommends wget git unzip apt-transport-https ca-certificates curl gnupg2 software-properties-common && \
   curl -fsSL https://download.docker.com/linux/$(. /etc/os-release; echo "$ID")/gpg > /tmp/dkey; apt-key add /tmp/dkey && \
   add-apt-repository \
     "deb [arch=amd64] https://download.docker.com/linux/$(. /etc/os-release; echo "$ID") \

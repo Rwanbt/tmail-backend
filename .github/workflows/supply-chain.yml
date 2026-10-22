@@ -1,0 +1,187 @@
+name: Supply chain
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+  schedule:
+    - cron: '41 3 * * 1'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  vulnerability-secret-and-misconfiguration-scan:
+    name: Vulnerabilities, secrets and misconfigurations
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      # The Apache James submodule is pinned and owned upstream; it is scanned in
+      # its own repository. Every other dependency of this repository is in scope.
+      - name: Scan the repository
+        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,secret,misconfig
+          severity: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
+          # A vulnerability with no fixed version cannot be remediated by a
+          # dependency bump, so it must not block the pipeline forever. It stays
+          # visible in the report.
+          ignore-unfixed: true
+          # The gate is applied by the next step, on the severity that matches
+          # the P0 definition of this mission. Reporting every severity here
+          # keeps the full inventory in the report artifact.
+          exit-code: '0'
+          format: json
+          output: trivy-report.json
+          skip-dirs: james-project
+          cache: true
+      - name: Fail on a critical finding
+        run: |
+          set -euo pipefail
+          python3 - <<'PYTHON' | tee "$GITHUB_STEP_SUMMARY"
+          import json
+          import sys
+
+          FAMILIES = ("Vulnerabilities", "Secrets", "Misconfigurations")
+
+          with open("trivy-report.json", encoding="utf-8") as handle:
+              report = json.load(handle)
+
+          inventory = []
+          for result in report.get("Results") or []:
+              target = result.get("Target", "")
+              for family in FAMILIES:
+                  for finding in result.get(family) or []:
+                      identifier = (
+                          finding.get("VulnerabilityID")
+                          or finding.get("RuleID")
+                          or finding.get("ID")
+                          or ""
+                      )
+                      inventory.append(
+                          (finding.get("Severity", "UNKNOWN"), target, identifier)
+                      )
+
+          print("## Dependency, secret and misconfiguration inventory")
+          print("")
+          print("| Severity | Target | Finding |")
+          print("|---|---|---|")
+          for severity, target, identifier in sorted(inventory):
+              print("| {} | {} | {} |".format(severity, target, identifier))
+          print("")
+          print(
+              "The HIGH findings accepted with their justification are listed in"
+              " ci/trivy-accepted-findings.md."
+          )
+          print("")
+
+          critical = [row for row in inventory if row[0] == "CRITICAL"]
+          if critical:
+              for severity, target, identifier in critical:
+                  print(
+                      "::error::critical finding: {} {} {}".format(
+                          severity, target, identifier
+                      )
+                  )
+              sys.exit(1)
+          print(
+              "No critical finding. The HIGH findings are the accepted ones listed"
+              " in ci/trivy-accepted-findings.md."
+          )
+          PYTHON
+      - name: Publish the scan report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: trivy-report
+          path: trivy-report.json
+          if-no-files-found: warn
+          retention-days: 30
+
+  sbom:
+    name: Software bill of materials
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Generate the CycloneDX bill of materials
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
+        with:
+          path: .
+          format: cyclonedx-json
+          output-file: sbom.cdx.json
+          upload-artifact: false
+      - name: Publish the CycloneDX bill of materials
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: sbom-cyclonedx
+          path: sbom.cdx.json
+          if-no-files-found: error
+          retention-days: 30
+      - name: Generate the SPDX bill of materials
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
+        with:
+          path: .
+          format: spdx-json
+          output-file: sbom.spdx.json
+          upload-artifact: false
+      - name: Publish the SPDX bill of materials
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: sbom-spdx
+          path: sbom.spdx.json
+          if-no-files-found: error
+          retention-days: 30
+      - name: Record the SBOM digest
+        run: |
+          {
+            echo "## Software bill of materials"
+            echo ""
+            echo "| Format | File | SHA256 |"
+            echo "|---|---|---|"
+            for file in sbom.cdx.json sbom.spdx.json; do
+              if [ -f "${file}" ]; then
+                echo "| ${file} | \`${file}\` | \`$(sha256sum "${file}" | cut -d' ' -f1)\` |"
+              fi
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  provenance:
+    name: Attested provenance
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [sbom]
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+      attestations: write
+    steps:
+      - name: Download the CycloneDX bill of materials
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: sbom-cyclonedx
+          path: attest
+      - name: Attest the provenance of the bill of materials
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
+        with:
+          subject-path: attest/sbom.cdx.json
