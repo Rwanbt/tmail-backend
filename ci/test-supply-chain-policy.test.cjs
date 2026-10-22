@@ -99,7 +99,7 @@ test('the accepted findings are inventoried and justified', () => {
     )
   }
   assert.match(inventory, /5 secrets \(HIGH, rule `private-key`\)/)
-  assert.match(inventory, /10 HIGH findings and 0 CRITICAL/)
+  assert.match(inventory, /9 HIGH findings and 0 CRITICAL/)
 })
 
 test('the bills of materials are published and identified by their digest', () => {
