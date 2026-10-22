@@ -47,11 +47,18 @@ class ForkUnitTestsEnumerationTest(unittest.TestCase):
             self.assertIn(name, fork_unit_tests.NON_UNIT_TESTS)
             self.assertTrue(reason.strip(), f"{name} is excluded without a reason")
 
-    def test_the_only_excluded_class_is_the_container_one(self):
+    def test_excluded_classes_are_the_documented_non_unit_ones(self):
         excluded = fork_unit_tests.excluded_classes(self.root)
         self.assertEqual(
             [name for name, _ in excluded],
-            ["MigrationMirroringTest"],
+            [
+                "MigrationMirroringTest",
+                "RabbitMQAndRedisEventBusTest",
+                "RabbitMQAndRedisEventBusWithKvrocksSentinelTest",
+                "RabbitMQAndRedisEventBusWithKvrocksTest",
+                "RabbitMQAndRedisEventBusWithPartitioningTest",
+                "RabbitMQAndRedisEventBusWithRedisSentinelTest",
+            ],
             "a new class was excluded from the unit regression job",
         )
 

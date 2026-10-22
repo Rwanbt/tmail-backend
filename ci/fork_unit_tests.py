@@ -53,6 +53,37 @@ NON_UNIT_TESTS = {
         "daemon; it is a container integration test, exercised by the "
         "Apache James Jenkins pipeline"
     ),
+    "RabbitMQAndRedisEventBusTest": (
+        "concrete implementation of the RabbitMQ/Redis event bus contract; "
+        "requires live RabbitMQ and Redis (Testcontainers) and exercises "
+        "dead-letter/invalid-payload paths that stall the unit runner "
+        "(EventBusTestFixture$TestEventSerializer.asEvents: Invalid format: "
+        "BAD_PAYLOAD!); covered by the distributed contract workflows"
+    ),
+    "RabbitMQAndRedisEventBusWithKvrocksTest": (
+        "concrete implementation of the RabbitMQ/Redis event bus contract "
+        "against Kvrocks; requires live RabbitMQ, Redis and Kvrocks "
+        "(Testcontainers) and the same invalid-payload dead-letter path; "
+        "covered by the distributed contract workflows"
+    ),
+    "RabbitMQAndRedisEventBusWithKvrocksSentinelTest": (
+        "concrete implementation of the RabbitMQ/Redis event bus contract "
+        "against Kvrocks in sentinel mode; requires live RabbitMQ, Redis and "
+        "Kvrocks (Testcontainers) and the same invalid-payload dead-letter "
+        "path; covered by the distributed contract workflows"
+    ),
+    "RabbitMQAndRedisEventBusWithPartitioningTest": (
+        "concrete implementation of the RabbitMQ/Redis event bus contract "
+        "with partitioning; requires live RabbitMQ and Redis (Testcontainers) "
+        "and the same invalid-payload dead-letter path; covered by the "
+        "distributed contract workflows"
+    ),
+    "RabbitMQAndRedisEventBusWithRedisSentinelTest": (
+        "concrete implementation of the RabbitMQ/Redis event bus contract "
+        "against Redis sentinel; requires live RabbitMQ and Redis "
+        "(Testcontainers) and the same invalid-payload dead-letter path; "
+        "covered by the distributed contract workflows"
+    ),
 }
 
 
