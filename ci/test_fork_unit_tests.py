@@ -74,6 +74,43 @@ class UnauthenticatedBlobAccessRespondDetailsTest extends RespondDetailsContract
             )
             self.assertEqual(fork_unit_tests.enumerate_modules(root), [":example"])
 
+    def test_enumerate_classes_ignores_nested_classes_of_abstract_contracts(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            module = root / "tmail-backend" / "example"
+            tests = module / "src" / "test" / "java" / "example"
+            tests.mkdir(parents=True)
+            (module / "pom.xml").write_text(
+                "<project><artifactId>example</artifactId></project>",
+                encoding="utf-8",
+            )
+            scala_tests = module / "src" / "test" / "scala" / "example"
+            scala_tests.mkdir(parents=True)
+            (scala_tests / "WithoutBodyTest.scala").write_text(
+                """package example
+trait Contract
+abstract class EmptyContractTest extends Contract
+class ConcreteScalaSuiteTest extends Contract {}
+""",
+                encoding="utf-8",
+            )
+            (tests / "ContractTest.java").write_text(
+                """package example;
+abstract class AbstractEventBusContractTest {
+    @Nested class ConcurrentTest { }
+}
+class ConcreteUnitTest { }
+""",
+                encoding="utf-8",
+            )
+
+            self.assertEqual(
+                fork_unit_tests.enumerate_classes(root),
+                ["ConcreteScalaSuiteTest", "ConcreteUnitTest"],
+            )
+
     def test_real_scala_serializer_suite_is_enumerated(self):
         classes = fork_unit_tests.enumerate_classes(self.root)
         self.assertIn("AiBotSerializerTest", classes)
@@ -113,13 +150,21 @@ class UnauthenticatedBlobAccessRespondDetailsTest extends RespondDetailsContract
 
 
 class ForkUnitTestsVerificationTest(unittest.TestCase):
-    def _report(self, directory: Path, suite: str, executed: int, skipped: int):
+    def _report(
+        self,
+        directory: Path,
+        suite: str,
+        executed: int,
+        skipped: int,
+        testcase_classname: str | None = None,
+    ):
         directory.mkdir(parents=True, exist_ok=True)
+        classname = testcase_classname or suite
         cases = "".join(
-            "<testcase name='test%d' classname='%s'/>" % (index, suite)
+            "<testcase name='test%d' classname='%s'/>" % (index, classname)
             for index in range(executed)
         ) + "".join(
-            "<testcase name='skip%d' classname='%s'><skipped/></testcase>" % (index, suite)
+            "<testcase name='skip%d' classname='%s'><skipped/></testcase>" % (index, classname)
             for index in range(skipped)
         )
         (directory / ("TEST-%s.xml" % suite)).write_text(
@@ -137,6 +182,31 @@ class ForkUnitTestsVerificationTest(unittest.TestCase):
             self._report(root, "com.linagora.tmail.FooTest", executed=2, skipped=0)
             summaries = fork_unit_tests.verify(root, ["FooTest"])
             self.assertTrue(any("PASS" in summary for summary in summaries))
+
+    def test_verify_maps_nested_junit_cases_to_the_declared_classes(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self._report(
+                root,
+                "com.linagora.tmail.OuterTest",
+                executed=1,
+                skipped=0,
+                testcase_classname="com.linagora.tmail.OuterTest$NestedTest",
+            )
+
+            summaries = fork_unit_tests.verify(
+                root, ["OuterTest", "NestedTest"]
+            )
+
+            self.assertEqual(
+                summaries,
+                [
+                    "PASS: 2 fork unit test classes executed; 1 test cases executed; "
+                    "0 skipped"
+                ],
+            )
 
     def test_verify_rejects_a_class_without_any_report(self):
         import tempfile

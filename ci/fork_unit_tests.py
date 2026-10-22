@@ -47,6 +47,10 @@ SCALA_CLASS = re.compile(
     r"(?m)^\s*((?:(?:abstract|final|sealed|private|protected)\s+)*)"
     r"class\s+([A-Za-z_$][\w$]*)"
 )
+NON_CODE = re.compile(
+    r'''//[^\r\n]*|/\*.*?\*/|"""[\s\S]*?"""|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*' ''',
+    re.DOTALL,
+)
 MODULE_POM = "pom.xml"
 
 # Classes that live under src/test but are not unit tests: they need a
@@ -134,14 +138,45 @@ def _test_class_names(candidate: Path) -> list[str]:
     """
     if not TEST_FILE.search(candidate.name):
         return []
-    source = _read(candidate)
+    source = NON_CODE.sub(
+        lambda match: "".join("\n" if character == "\n" else " " for character in match.group()),
+        _read(candidate),
+    )
     declaration = JAVA_CLASS if candidate.suffix == ".java" else SCALA_CLASS
+    abstract_scopes = _abstract_class_scopes(source, declaration)
     result = []
     for match in declaration.finditer(source):
         modifiers, name = match.groups()
-        if TEST_CLASS_NAME.search(name) and "abstract" not in modifiers.split():
-            result.append(name)
+        if not TEST_CLASS_NAME.search(name) or "abstract" in modifiers.split():
+            continue
+        if any(start < match.start() < end for start, end in abstract_scopes):
+            continue
+        result.append(name)
     return result
+
+
+def _abstract_class_scopes(source: str, declaration: re.Pattern[str]) -> list[tuple[int, int]]:
+    """Find abstract class bodies so nested contract cases are not suites."""
+    scopes = []
+    for match in declaration.finditer(source):
+        modifiers, _ = match.groups()
+        if "abstract" not in modifiers.split():
+            continue
+        next_class = declaration.search(source, match.end())
+        next_class_start = next_class.start() if next_class else len(source)
+        opening = source.find("{", match.end(), next_class_start)
+        if opening == -1:
+            continue
+        depth = 0
+        for index in range(opening, len(source)):
+            if source[index] == "{":
+                depth += 1
+            elif source[index] == "}":
+                depth -= 1
+                if depth == 0:
+                    scopes.append((opening, index))
+                    break
+    return scopes
 
 
 def enumerate_modules(root: Path) -> list[str]:
@@ -189,9 +224,12 @@ def excluded_classes(root: Path) -> list[tuple[str, str]]:
     ]
 
 
-def collect_reports(reports_root: Path) -> dict[str, tuple[int, int]]:
-    """Map a simple test class name to (executed, skipped) from Surefire XML."""
+def collect_reports(
+    reports_root: Path,
+) -> tuple[dict[str, tuple[int, int]], tuple[int, int]]:
+    """Map report cases to declared classes, including nested JUnit classes."""
     collected: dict[str, tuple[int, int]] = {}
+    totals = [0, 0]
     for report in reports_root.rglob("TEST-*.xml"):
         try:
             root = ET.parse(report).getroot()
@@ -199,18 +237,26 @@ def collect_reports(reports_root: Path) -> dict[str, tuple[int, int]]:
             continue
         suites = [root] if root.tag == "testsuite" else list(root.findall("testsuite"))
         for suite in suites:
-            name = suite.get("name") or ""
-            simple = name.rsplit(".", 1)[-1]
-            executed = 0
-            skipped = 0
+            suite_skipped = int(suite.get("skipped", 0))
+            suite_tests = int(suite.get("tests", 0))
+            totals[0] += suite_tests - suite_skipped
+            totals[1] += suite_skipped
             for case in suite.findall("testcase"):
-                if case.find("skipped") is not None:
-                    skipped += 1
-                else:
-                    executed += 1
-            previous = collected.get(simple, (0, 0))
-            collected[simple] = (previous[0] + executed, previous[1] + skipped)
-    return collected
+                skipped = case.find("skipped") is not None
+                class_name = case.get("classname") or suite.get("name") or ""
+                nested_names = class_name.rsplit(".", 1)[-1].split("$")
+                test_classes = {
+                    name for name in nested_names if TEST_CLASS_NAME.search(name)
+                }
+                if not test_classes:
+                    test_classes = {nested_names[-1]}
+                for name in test_classes:
+                    previous = collected.get(name, (0, 0))
+                    collected[name] = (
+                        previous[0] + int(not skipped),
+                        previous[1] + int(skipped),
+                    )
+    return collected, (totals[0], totals[1])
 
 
 def class_modules(root: Path) -> dict[str, str]:
@@ -251,7 +297,7 @@ def verify(
     """Prove every expected class executed at least one non-skipped test case."""
     if not expected:
         raise ValueError("No expected unit test class was found in the source tree")
-    collected = collect_reports(reports_root)
+    collected, (total_executed, total_skipped) = collect_reports(reports_root)
     owners = owners or {}
 
     def describe(name: str) -> str:
@@ -282,8 +328,6 @@ def verify(
             + "; per module, expected classes versus classes with a report: "
             + "; ".join(sorted(per_module(owners, expected, collected)))
         )
-    total_executed = sum(collected[name][0] for name in expected)
-    total_skipped = sum(collected[name][1] for name in expected)
     return [
         "PASS: {0} fork unit test classes executed; {1} test cases executed; "
         "{2} skipped".format(len(expected), total_executed, total_skipped)
