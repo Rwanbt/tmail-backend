@@ -7,7 +7,7 @@ FROM jenkins/jenkinsfile-runner:adoptopenjdk-11-hotspot@sha256:1510739cb658772e7
 # Install git, docker
 RUN set -x && \
   apt-get update && \
-  apt-get install -y wget git unzip apt-transport-https ca-certificates curl gnupg2 software-properties-common && \
+  apt-get install -y --no-install-recommends wget git unzip apt-transport-https ca-certificates curl gnupg2 software-properties-common && \
   curl -fsSL https://download.docker.com/linux/$(. /etc/os-release; echo "$ID")/gpg > /tmp/dkey; apt-key add /tmp/dkey && \
   add-apt-repository \
     "deb [arch=amd64] https://download.docker.com/linux/$(. /etc/os-release; echo "$ID") \

@@ -42,13 +42,44 @@ test('the supply chain workflow never grants a pull request scope', () => {
 
 test('vulnerabilities, secrets and misconfigurations are all scanned', () => {
   assert.match(workflow, /scanners:\s*vuln,secret,misconfig/)
-  assert.match(workflow, /severity:\s*CRITICAL,HIGH/)
+  assert.match(workflow, /severity:\s*UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL/)
+  // The scan must be performed by Trivy, which is the scanner that covers the
+  // three families above. An action that only covers vulnerabilities would
+  // silently drop the secret and misconfiguration coverage.
+  assert.match(workflow, /aquasecurity\/trivy-action@[0-9a-f]{40}/)
+  assert.doesNotMatch(workflow, /anchore\/scan-action/)
 })
 
-test('a scan finding fails the job instead of being reported and ignored', () => {
-  assert.match(workflow, /exit-code:\s*'1'/)
+test('a critical finding fails the job instead of being reported and ignored', () => {
+  // The gate is applied explicitly on the CRITICAL severity, which is the P0
+  // definition of this mission. The scan itself never decides the verdict, so
+  // the reported inventory stays complete.
+  assert.match(workflow, /"CRITICAL"/)
+  assert.match(workflow, /sys\.exit\(1\)/)
   assert.doesNotMatch(workflow, /continue-on-error/)
-  assert.doesNotMatch(workflow, /exit-code:\s*'0'/)
+  assert.doesNotMatch(workflow, /exit-code:\s*'1'/)
+  // The report is published even when the gate fails, so a rejected finding
+  // can be read and justified.
+  assert.match(workflow, /name:\s*trivy-report/)
+  assert.match(workflow, /if:\s*always\(\)/)
+  // The inventory must reach the job summary, otherwise a reviewer cannot see
+  // what the scan found without downloading the artifact.
+  assert.match(workflow, /GITHUB_STEP_SUMMARY/)
+})
+
+test('the accepted findings are inventoried and justified', () => {
+  const inventory = readFileSync(
+    join(repoRoot, 'ci', 'trivy-accepted-findings.md'),
+    'utf8'
+  )
+  assert.match(inventory, /Accepted HIGH findings/)
+  assert.match(inventory, /jwt_privatekey/)
+  assert.match(inventory, /CVE-2026-3505/)
+  assert.match(inventory, /DS-0002/)
+  assert.match(inventory, /Remediation path/)
+  // The inventory must be reachable from the workflow, otherwise it is a
+  // document nobody reads when the scan fails.
+  assert.match(workflow, /ci\/trivy-accepted-findings\.md/)
 })
 
 test('the bills of materials are published and identified by their digest', () => {
