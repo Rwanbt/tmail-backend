@@ -21,4 +21,5 @@ jobs:
           node-version: '22'
       - run: node --test ci/*.test.cjs
       - run: python3 -m unittest discover -s ci -p 'test_check_maven_dependencies.py'
+      - run: python3 -m unittest discover -s ci -p 'test_fork_unit_tests.py'
       - run: python3 ci/check_maven_dependencies.py tmail-backend

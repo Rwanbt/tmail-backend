@@ -1,0 +1,73 @@
+name: Fork unit regression
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/fork-unit-regression.yml'
+      - 'ci/fork_unit_tests.py'
+      - 'ci/test_fork_unit_tests.py'
+      - 'tmail-backend/**'
+      - 'pom.xml'
+  push:
+    branches: [master]
+  schedule:
+    - cron: '23 4 * * *'
+
+permissions:
+  contents: read
+
+jobs:
+  fork-unit-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+          submodules: recursive
+      - uses: actions/setup-java@dded0888837ed1f317902acf8a20df0ad188d165 # v4
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+      - name: Enumerate the unit tests the fork owns
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s ci -p 'test_fork_unit_tests.py'
+          python3 ci/fork_unit_tests.py list > "$RUNNER_TEMP/fork-unit-tests.env"
+          cat "$RUNNER_TEMP/fork-unit-tests.env" >> "$GITHUB_ENV"
+          sed -n 's/^CLASSES=//p' "$RUNNER_TEMP/fork-unit-tests.env" | tr ',' '\n' \
+            > "$RUNNER_TEMP/expected-unit-classes.txt"
+          echo "Fork unit test modules: $(echo "$MODULES" | tr ',' '\n' | wc -l)"
+          echo "Fork unit test classes: $(wc -l < "$RUNNER_TEMP/expected-unit-classes.txt")"
+      - name: Execute the unit tests the fork owns
+        timeout-minutes: 80
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The `-Dtest` filter and `-Dsurefire.failIfNoSpecifiedTests=false` are
+          # the same mechanism the integration contract workflows use. It is
+          # required here too: without it the upstream Apache James modules of
+          # the reactor would run their whole unit suite, which is not owned by
+          # this fork and is exercised by the Jenkins pipeline instead.
+          mvn -B -ntp \
+            -pl "$MODULES" -am \
+            "-Dtest=$CLASSES" \
+            -Dsurefire.failIfNoSpecifiedTests=false \
+            test
+      - name: Confirm the fork unit tests genuinely executed
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 ci/fork_unit_tests.py verify \
+            --reports tmail-backend \
+            --expected "$RUNNER_TEMP/expected-unit-classes.txt"
+      - name: Publish the unit test reports
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: fork-unit-regression-surefire
+          path: 'tmail-backend/**/target/surefire-reports/TEST-*.xml'
+          if-no-files-found: warn
+          retention-days: 30
