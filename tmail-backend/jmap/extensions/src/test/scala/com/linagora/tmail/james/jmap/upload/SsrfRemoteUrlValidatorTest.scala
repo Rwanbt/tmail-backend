@@ -1,0 +1,92 @@
+/********************************************************************
+ *  As a subpart of Twake Mail, this file is edited by Linagora.    *
+ *                                                                  *
+ *  https://twake-mail.com/                                         *
+ *  https://linagora.com                                            *
+ *                                                                  *
+ *  This file is subject to The Affero Gnu Public License           *
+ *  version 3.                                                      *
+ *                                                                  *
+ *  https://www.gnu.org/licenses/agpl-3.0.en.html                   *
+ *                                                                  *
+ *  This program is distributed in the hope that it will be         *
+ *  useful, but WITHOUT ANY WARRANTY; without even the implied      *
+ *  warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR       *
+ *  PURPOSE. See the Affero GNU General Public License for more      *
+ *  details.                                                         *
+ ********************************************************************/
+
+package com.linagora.tmail.james.jmap.upload
+
+import java.net.URI
+
+import org.assertj.core.api.Assertions.assertThatCode
+import org.assertj.core.api.Assertions.assertThatThrownBy
+import org.junit.jupiter.api.Test
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.ValueSource
+
+/**
+ * Integration proof of the production SSRF address policy.
+ *
+ * The policy itself lives in the pinned Apache James submodule. This suite
+ * exercises it through the production TMail entry point
+ * [[SsrfRemoteUrlValidator]], with the real system resolver, so the addresses
+ * are resolved exactly like a JMAP upload-from-URL request resolves them.
+ *
+ * It covers the ranges the qualification requires: private IPv4, private IPv6,
+ * the IPv6 cloud metadata endpoint, IPv4-mapped IPv6 and the alternative IPv4
+ * notations (decimal, octal, hexadecimal) that the JDK resolver silently
+ * translates into a loopback address.
+ *
+ * The bound address is never contacted: the resolution is rejected before any
+ * connection is established.
+ */
+class SsrfRemoteUrlValidatorTest {
+  private val validator = new SsrfRemoteUrlValidator()
+
+  @ParameterizedTest
+  @ValueSource(strings = Array(
+    // IPv4 loopback and private ranges
+    "http://127.0.0.1/",
+    "http://10.0.0.1/",
+    "http://172.16.0.1/",
+    "http://192.168.0.1/",
+    // IPv4 link local: the cloud metadata endpoint
+    "http://169.254.169.254/",
+    // Wildcard and shared address space
+    "http://0.0.0.0/",
+    "http://100.64.0.1/",
+    // IPv6 loopback, unique local and link local
+    "http://[::1]/",
+    "http://[fc00::1]/",
+    "http://[fe80::1]/",
+    // IPv4-mapped IPv6: the traffic ends up on the embedded IPv4 address
+    "http://[::ffff:127.0.0.1]/",
+    // Alternative IPv4 notations. The resolutions below are the ones the JDK
+    // really performs (verified with InetAddress.getAllByName):
+    //   2130706433 -> 127.0.0.1        (decimal single part)
+    //   0177       -> 0.0.0.177        (octal single part, this-network range)
+    //   127.1      -> 127.0.0.1        (short dotted form)
+    // A dotted leading zero is NOT octal for the JDK: 0177.0.0.1 resolves to
+    // the public 177.0.0.1 and is therefore legitimately not refused.
+    "http://2130706433/",
+    "http://0177/",
+    "http://127.1/",
+    // A hexadecimal literal is not a resolvable name for the JDK: such a host
+    // is refused instead of being connected to.
+    "http://0x7f000001/"
+  ))
+  def shouldRejectEveryAddressReachingTheLocalNetwork(url: String): Unit = {
+    assertThatThrownBy(() => validator.validate(URI.create(url)).block())
+      .as("the production SSRF policy must refuse %s", url)
+      .isNotNull
+  }
+
+  @Test
+  def shouldAcceptAPublicAddress(): Unit = {
+    assertThatCode(() => validator.validate(URI.create("http://93.184.216.34/")).block())
+      .as("a public address must not be refused by the SSRF policy")
+      .doesNotThrowAnyException
+  }
+}

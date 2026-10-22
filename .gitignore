@@ -4,3 +4,5 @@ ci-logs/
 ci-failure-report.md
 ci-failure-report.json
 ci-failure-report-response.json
+__pycache__/
+*.pyc

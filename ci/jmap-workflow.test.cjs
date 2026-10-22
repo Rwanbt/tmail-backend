@@ -73,6 +73,41 @@ test('a Maven zero-tests success is never presented as JMAP integration PASS', (
   assert.match(workflow, /if: always\(\)/)
 })
 
+test('the SSRF address policy is executed by a gate, never assumed', () => {
+  // The address policy (private IPv4/IPv6, IPv4-mapped IPv6, DNS rebinding)
+  // lives in the pinned Apache James submodule and in the production TMail
+  // entry point. Both suites must be selected and verified.
+  assert.match(workflow, /SsrfRemoteUrlValidatorTest/)
+  assert.match(workflow, /SSRFValidatorTest/)
+  assert.match(workflow, /--require com\.linagora\.tmail\.james\.jmap\.upload\.SsrfRemoteUrlValidatorTest:shouldRejectEveryAddressReachingTheLocalNetwork/)
+  assert.match(workflow, /--require com\.linagora\.tmail\.james\.jmap\.upload\.SsrfRemoteUrlValidatorTest:shouldAcceptAPublicAddress/)
+  assert.match(workflow, /ci\/verify_james_ssrf_surefire\.py/)
+  assert.match(workflow, /james-project\/server\/protocols\/jmap-rfc-8621\/target\/surefire-reports/)
+  assert.match(workflow, /test_verify_james_ssrf_surefire\.py/)
+})
+
+test('the upload-from-URL policy and the JMAP ticket lifecycle suites are executed', () => {
+  // These suites exist in the production module but no gate selected them:
+  // a Maven SUCCESS could mean that no upload-from-URL policy test and no
+  // ticket revocation/expiration test ever ran.
+  for (const suite of [
+    'AllowedRemoteSourceTest',
+    'RemoteUrlPolicyTest',
+    'UploadFromUrlConfigurationTest',
+    'BoundedRemoteContentDecompressorTest',
+    'RemoteUrlForLoggingTest',
+    'UploadFromUrlCapabilityTest',
+    'TicketManagerTest',
+  ]) {
+    assert.match(workflow, new RegExp(suite), `Missing executed security suite ${suite}`)
+  }
+  assert.match(workflow, /--require com\.linagora\.tmail\.james\.jmap\.ticket\.TicketManagerTest:ticketCanBeRevoked/)
+  assert.match(workflow, /--require com\.linagora\.tmail\.james\.jmap\.ticket\.TicketManagerTest:ticketShouldExpire/)
+  assert.match(workflow, /--require com\.linagora\.tmail\.james\.jmap\.ticket\.TicketManagerTest:ticketShouldBeSingleUse/)
+  assert.match(workflow, /--require com\.linagora\.tmail\.james\.jmap\.upload\.RemoteUrlPolicyTest:shouldSelectSsrfModeWithoutSources/)
+  assert.match(workflow, /--require com\.linagora\.tmail\.james\.jmap\.upload\.UploadFromUrlConfigurationTest:shouldBeDisabledByDefault/)
+})
+
 test('real Maven reactor does not contain duplicated managed MongoDB coordinates', () => {
   const managedDependencies = modulePom.match(/<dependencyManagement>([\s\S]*?)<\/dependencyManagement>/)?.[1] ?? ''
   assert.ok(managedDependencies.length, 'missing reactor dependencyManagement')
