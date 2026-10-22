@@ -52,7 +52,7 @@ jobs:
           set -euo pipefail
           mvn -B -ntp \
             -pl :memory-jmap-integration-tests,:jmap-extensions -am \
-            -Dtest=MemoryEmailGetMethodTest,MemoryEmailSetMethodTest,MemoryEmailSubmissionSetMethodTest,MemoryMailboxSetMethodTest,MemoryWebPushDisabledTest,MemoryWebSocketTransportDisabledTest,MemoryWebSocketTransportEnabledTest,MemoryTeamMailboxMemberSetMethodTest,MemoryTicketAuthenticationTest,MemoryUnauthenticatedBlobAccessSetMethodTest,MemoryLinagoraEmailSendMethodTest,MemoryUploadFromUrlTest,EmailSendQueueCleanupTest,EmailSendFailureSanitizationTest,EmailSendPrepublicationFailureTest,EmailSendIdempotencyTest,EmailSendOutboxStateTest,SsrfRemoteUrlValidatorTest,SSRFValidatorTest,AllowedRemoteSourceTest,RemoteUrlPolicyTest,UploadFromUrlConfigurationTest,BoundedRemoteContentDecompressorTest,RemoteUrlForLoggingTest,UploadFromUrlCapabilityTest,TicketManagerTest \
+            -Dtest=MemoryEmailGetMethodTest,MemoryEmailSetMethodTest,MemoryEmailSubmissionSetMethodTest,MemoryMailboxSetMethodTest,MemoryWebPushDisabledTest,MemoryWebSocketTransportDisabledTest,MemoryWebSocketTransportEnabledTest,MemoryTeamMailboxMemberSetMethodTest,MemoryTicketAuthenticationTest,MemoryUnauthenticatedBlobAccessSetMethodTest,MemoryLinagoraEmailSendMethodTest,MemoryUploadFromUrlTest,EmailSendQueueCleanupTest,EmailSendFailureSanitizationTest,EmailSendPrepublicationFailureTest,EmailSendIdempotencyTest,EmailSendOutboxStateTest,SsrfRemoteUrlValidatorTest,SSRFValidatorTest,AllowedRemoteSourceTest,RemoteUrlPolicyTest,UploadFromUrlConfigurationTest,BoundedRemoteContentDecompressorTest,RemoteUrlForLoggingTest,UploadFromUrlCapabilityTest,TicketManagerTest,MemoryOidcAuthenticationTest \
             -Dsurefire.failIfNoSpecifiedTests=false \
             test
       - name: Confirm JMAP test methods genuinely executed
@@ -181,6 +181,23 @@ jobs:
           # resolution and IPv4-mapped IPv6 held as an IPv6 address.
           python3 ci/verify_james_ssrf_surefire.py \
             james-project/server/protocols/jmap-rfc-8621/target/surefire-reports
+      - name: Require the OIDC authentication strategy to be executed, not assumed
+        shell: bash
+        run: |
+          # The JMAP OIDC authentication strategy (audience control, expired and
+          # revoked token rejection, introspection cache) is a mandatory D3
+          # control whose suite was never selected by any gate.
+          python3 ci/verify_jmap_surefire.py \
+            tmail-backend/integration-tests/jmap/memory-jmap-integration-tests/target/surefire-reports \
+            MemoryOidcAuthenticationTest \
+            --require MemoryOidcAuthenticationTest:shouldAuthenticateWithOidc \
+            --require MemoryOidcAuthenticationTest:shouldAcceptAudArray \
+            --require MemoryOidcAuthenticationTest:shouldRejectOutdatedToken \
+            --require MemoryOidcAuthenticationTest:shouldRejectRevokedToken \
+            --require MemoryOidcAuthenticationTest:shouldRejectBadAudience \
+            --require MemoryOidcAuthenticationTest:shouldAcceptOtherConfiguredAudience \
+            --require MemoryOidcAuthenticationTest:shouldNotShareCacheAcrossDifferentOidcTokens \
+            --require MemoryOidcAuthenticationTest:forwardSetShouldSucceedWithOidcAuthenticationStrategy
       - name: Preserve real Maven test evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7

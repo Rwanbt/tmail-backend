@@ -108,6 +108,16 @@ test('the upload-from-URL policy and the JMAP ticket lifecycle suites are execut
   assert.match(workflow, /--require com\.linagora\.tmail\.james\.jmap\.upload\.UploadFromUrlConfigurationTest:shouldBeDisabledByDefault/)
 })
 
+test('the JMAP OIDC authentication strategy is executed, not assumed', () => {
+  assert.match(workflow, /MemoryOidcAuthenticationTest/)
+  assert.match(workflow, /--require MemoryOidcAuthenticationTest:shouldAuthenticateWithOidc/)
+  assert.match(workflow, /--require MemoryOidcAuthenticationTest:shouldRejectOutdatedToken/)
+  assert.match(workflow, /--require MemoryOidcAuthenticationTest:shouldRejectRevokedToken/)
+  assert.match(workflow, /--require MemoryOidcAuthenticationTest:shouldRejectBadAudience/)
+  assert.match(workflow, /--require MemoryOidcAuthenticationTest:shouldAcceptAudArray/)
+  assert.match(workflow, /--require MemoryOidcAuthenticationTest:forwardSetShouldSucceedWithOidcAuthenticationStrategy/)
+})
+
 test('real Maven reactor does not contain duplicated managed MongoDB coordinates', () => {
   const managedDependencies = modulePom.match(/<dependencyManagement>([\s\S]*?)<\/dependencyManagement>/)?.[1] ?? ''
   assert.ok(managedDependencies.length, 'missing reactor dependencyManagement')
