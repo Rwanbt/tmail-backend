@@ -60,6 +60,9 @@ class ForkUnitTestsEnumerationTest(unittest.TestCase):
 trait RespondDetailsContract
 class DownloadAllRespondDetailsTest extends RespondDetailsContract
 class UnauthenticatedBlobAccessRespondDetailsTest extends RespondDetailsContract
+class RedisPlaygroundTest {
+  class StringsTest
+}
 """,
                 encoding="utf-8",
             )
@@ -69,9 +72,11 @@ class UnauthenticatedBlobAccessRespondDetailsTest extends RespondDetailsContract
                 fork_unit_tests.enumerate_classes(root),
                 [
                     "DownloadAllRespondDetailsTest",
+                    "RedisPlaygroundTest",
                     "UnauthenticatedBlobAccessRespondDetailsTest",
                 ],
             )
+            self.assertNotIn("StringsTest", fork_unit_tests.enumerate_classes(root))
             self.assertEqual(fork_unit_tests.enumerate_modules(root), [":example"])
 
     def test_enumerate_classes_ignores_nested_classes_of_abstract_contracts(self):
@@ -138,6 +143,7 @@ class ConcreteUnitTest { }
                 "RabbitMQAndRedisEventBusWithPartitioningTest",
                 "RabbitMQAndRedisEventBusWithRedisSentinelTest",
                 "RedisClusterUnauthenticatedBlobDownloadTokenRepositoryTest",
+                "RedisPlaygroundTest",
             ],
             "a new class was excluded from the unit regression job",
         )

@@ -40,11 +40,11 @@ INTEGRATION_PREFIXES = (
 TEST_FILE = re.compile(r"(Test|Tests|Spec)\.(java|scala)$")
 TEST_CLASS_NAME = re.compile(r"(?:Test|Tests|Spec)$")
 JAVA_CLASS = re.compile(
-    r"(?m)^\s*((?:(?:public|protected|private|static|final|abstract|sealed)\s+)*)"
+    r"(?m)^((?:(?:public|protected|private|static|final|abstract|sealed)\s+)*)"
     r"class\s+([A-Za-z_$][\w$]*)"
 )
 SCALA_CLASS = re.compile(
-    r"(?m)^\s*((?:(?:abstract|final|sealed|private|protected)\s+)*)"
+    r"(?m)^((?:(?:abstract|final|sealed|private|protected)\s+)*)"
     r"class\s+([A-Za-z_$][\w$]*)"
 )
 NON_CODE = re.compile(
@@ -100,6 +100,13 @@ NON_UNIT_TESTS = {
         "exercises a live Redis cluster through Testcontainers; the cluster "
         "is not available in the unit regression runner (CLUSTERDOWN), so "
         "the test cannot pass there; covered by the Redis integration suites"
+    ),
+    "RedisPlaygroundTest": (
+        "the source explicitly annotates the outer suite @Disabled with "
+        "'Avoid CI build cost. This test suite is just for local dev experiment "
+        "with Redis.' Its @Nested test classes are not independently runnable; "
+        "they are not counted as executed unit tests. Redis product coverage "
+        "must come from the dedicated distributed integration suites"
     ),
 }
 
