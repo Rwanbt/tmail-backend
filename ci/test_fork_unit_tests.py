@@ -136,6 +136,11 @@ class ConcreteUnitTest { }
         self.assertEqual(
             [name for name, _ in excluded],
             [
+                "AIBotMailetTest",
+                "AIIntegrationTest",
+                "AIRedactionalHelperTest",
+                "FirebaseClientTest",
+                "LinagoraLlmMailClassifierListenerTest",
                 "MigrationMirroringTest",
                 "RabbitMQAndRedisEventBusTest",
                 "RabbitMQAndRedisEventBusWithKvrocksSentinelTest",
@@ -147,6 +152,27 @@ class ConcreteUnitTest { }
             ],
             "a new class was excluded from the unit regression job",
         )
+
+    def test_external_manual_exclusions_remain_explicitly_disabled(self):
+        required_disable_reasons = {
+            "AIBotMailetTest": "Requires a valid API key",
+            "AIIntegrationTest": "Unstable test https://github.com/linagora/tmail-backend/issues/1303",
+            "AIRedactionalHelperTest": "Requires a valid API key",
+            "FirebaseClientTest": "manual test suite",
+            "LinagoraLlmMailClassifierListenerTest": "Manual run. Requires a valid Linagora AI's API key",
+        }
+        source_files = list(
+            self.root.glob(f"{fork_unit_tests.FORK_ROOT}/**/src/test/**/*.java")
+        )
+        for class_name, reason in required_disable_reasons.items():
+            source_file = next(
+                (candidate for candidate in source_files if candidate.stem == class_name),
+                None,
+            )
+            self.assertIsNotNone(source_file, f"missing source for {class_name}")
+            source = fork_unit_tests._read(source_file)
+            self.assertIn("@Disabled", source, class_name)
+            self.assertIn(reason, source, class_name)
 
     def test_an_excluded_class_is_not_part_of_the_expected_classes(self):
         excluded = {name for name, _ in fork_unit_tests.excluded_classes(self.root)}

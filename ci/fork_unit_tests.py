@@ -53,12 +53,38 @@ NON_CODE = re.compile(
 )
 MODULE_POM = "pom.xml"
 
-# Classes that live under src/test but are not unit tests: they need a
-# container image or a running backend, so they cannot run in the unit
-# regression job. They are excluded with their reason, the exclusion is
-# reported in the job summary, and the contract test asserts that this list
-# stays exactly as declared: nothing can be silently dropped.
+# Classes under src/test that cannot be proven by this hermetic unit job:
+# external services/secrets, intentionally disabled manual/unstable suites, or
+# a container-only lifecycle. They are never counted as passing evidence.
+# Every exclusion is printed in the job summary and locked by contract tests;
+# the corresponding capability remains unqualified until a real integration
+# workflow proves it.
 NON_UNIT_TESTS = {
+    "AIBotMailetTest": (
+        "the source marks this suite @Disabled because it requires a valid "
+        "external AI API key; no real credential is available to the hermetic "
+        "unit job, so it is not counted as passing evidence"
+    ),
+    "AIIntegrationTest": (
+        "the source marks this suite @Disabled as unstable (issue #1303); it "
+        "is not counted as passing evidence until a deterministic integration "
+        "test replaces or repairs it"
+    ),
+    "AIRedactionalHelperTest": (
+        "the source marks this suite @Disabled because it requires a valid "
+        "external AI API key; no real credential is available to the hermetic "
+        "unit job, so it is not counted as passing evidence"
+    ),
+    "FirebaseClientTest": (
+        "the source marks this suite @Disabled as a manual Firebase test; it "
+        "requires external Firebase credentials/services and is not counted "
+        "as passing evidence"
+    ),
+    "LinagoraLlmMailClassifierListenerTest": (
+        "the source marks this suite @Disabled as a manual integration that "
+        "requires a Linagora AI API key and configured label IDs; it is not "
+        "counted as passing evidence"
+    ),
     "MigrationMirroringTest": (
         "starts the previous backend from the Jib built image tar "
         "(tmail-backend/apps/memory/target/jib-image.tar) and needs a Docker "
